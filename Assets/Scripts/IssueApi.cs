@@ -35,7 +35,8 @@ namespace MvpArSubmitter
         {
             using (UnityWebRequest request = BuildCreateRequest(data))
             {
-                request.SendWebRequest().WaitForCompletion();
+                UnityWebRequestAsyncOperation op = request.SendWebRequest();
+                while (!op.isDone) { System.Threading.Thread.Sleep(10); }
                 return Parse(request);
             }
         }

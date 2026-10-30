@@ -40,3 +40,23 @@
 - 涉及文件：docs/PROGRESS.md、.gitignore
 - 验证结果：见提交记录
 - 下一步：修复 IssueApi.cs 第 38 行 WaitForCompletion（CS1061）→ 重跑导入编译 → S4 自动化提交
+
+## [2] 2026-10-30 S4 自动化提交通过（假坐标，batchmode 端到端）
+
+| 检查项 | 命令 | 退出码 | 关键输出 | 结论(PASS/FAIL) |
+|---|---|---|---|---|
+| 修 IssueApi.cs 缺 using | Edit 第 4 行前插入 `using UnityEngine;` | — | 改后 1-6 行：`using System;`/`using System.Collections;`/`using System.Text;`/`using UnityEngine;`/`using UnityEngine.Networking;` | PASS |
+| 导入编译（修 CS1061 两文件后） | `Unity.exe -batchmode -quit -projectPath ... -logFile docs/s4-import.log` | EXIT=0 | `EXIT=0` | PASS |
+| 判据1 无 CS 错误 | `grep -c "error CS" docs/s4-import.log` | grep 1 | `0`（无匹配） | PASS |
+| 判据2 MovedFromExtractor 消失 | `grep -c "ApiUpdater.MovedFromExtractor" docs/s4-import.log` | grep 1 | `0`（无匹配，证实 62f3c1 安装修复有效） | PASS |
+| 后端 health | `curl -s http://127.0.0.1:8080/api/health` | 0 | `{"status":"ok","time":"2026-10-30T07:38:06Z"}` | PASS |
+| 基线 before | `curl -s http://127.0.0.1:8080/api/issues` | 0 | `"total":2`（1fad3f5b 机房空调异响 / 33a4dccd 3F 走廊墙面破损） | PASS |
+| S4 自动化提交（短名首跑） | `Unity.exe ... -executeMethod S4TestRunner.Run` | EXIT=1 | 日志 308 行：`executeMethod class 'S4TestRunner' could not be found.`（类在 namespace MvpArSubmitter 内，命令用了短名；参数问题非代码问题，重试 1 次） | FAIL（已定位） |
+| S4 自动化提交（全名重跑 1/1） | `Unity.exe ... -executeMethod MvpArSubmitter.S4TestRunner.Run` | EXIT=0 | `Logs/s4-test.log`：`HTTP 状态码: 201`/`成功: True`/`issues.json 对应条数: 前=2 后=3`/返回 id `e733b2d1-1ccf-46bd-b24e-fc40b7c68154` | PASS |
+| 外部独立确认 | `curl -s http://127.0.0.1:8080/api/issues` | 0 | `"title":"S4-自动测试-20261030-155734"`、`"position":{"x":1,"y":0,"z":1}`、`"total":3`（= before+1） | PASS |
+
+本轮发现并修复的问题：
+1. `Assets/Scripts/IssueApi.cs` 缺 `using UnityEngine;` 导致 CS0246（MonoBehaviour / Coroutine），此前因旧编辑器（22f1 安装缺陷）编译从未走到 Assembly-CSharp 而一直被掩盖。
+2. `IssueApi.cs:38` 与 `Assets/Editor/S4TestRunner.cs:64` 使用了本机 Unity 2022.3.62f3c1 不存在的 `AsyncOperation.WaitForCompletion()`（CS1061），同属被掩盖的历史问题；均改为 `UnityWebRequestAsyncOperation op = ...; while (!op.isDone) { Thread.Sleep(10); }`（request.timeout=8 兜底，不会死等）。
+3. 调用参数问题：`-executeMethod S4TestRunner.Run` 短名找不到类，须用全名 `MvpArSubmitter.S4TestRunner.Run`（代码未改，命令修正，重试 1 次内解决）。
+- 下一步：等用户确认后进入 Play 模式人工验证（SubmitUIBootstrap 运行时 UI + 空标题拦截 + 真实提交），或直接进入 S5（AR 集成）。

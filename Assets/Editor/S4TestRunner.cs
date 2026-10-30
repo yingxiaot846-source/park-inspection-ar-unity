@@ -61,7 +61,8 @@ namespace MvpArSubmitter
             using (UnityWebRequest request = UnityWebRequest.Get(ApiConfig.BaseUrl + "/api/issues"))
             {
                 request.timeout = 8;
-                request.SendWebRequest().WaitForCompletion();
+                UnityWebRequestAsyncOperation op = request.SendWebRequest();
+                while (!op.isDone) { System.Threading.Thread.Sleep(10); }
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     return -1;
