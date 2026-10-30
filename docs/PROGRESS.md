@@ -156,3 +156,22 @@ APK 内嵌 ARCore 原生库已核实（unzip -l 原始输出）：
 - 途中一次按纪律停顿：首轮 `git add -A` 后 staged 中出现 UserSettings/（基线 commit 313e889 已跟踪，.gitignore 不生效），贴全量 status 等裁定，用户指定方案 A 处理后完成提交。
 - 涉及文件：.gitignore、docs/PROGRESS.md、（承接上文）ProjectSettings.asset / S5Setup.cs 各 1 行；未新增任何代码改动、未重打包、未重跑 Setup、未装机。
 - 下一步：装机验证由用户完成（S5.1 唯一目标：手机见摄像头画面 + 平面检测数量 HUD）；之后进 S5.2（手机连 LAN 后端 192.168.5.29:8080）。
+
+## [17] 2026-10-31 S5.2 平面点选放置标记 + 真实坐标提交：打包成功（commit 4c1adfc）
+
+目标：假坐标 (1,0,1) → 手指点平面放标记 → 提交真实命中点坐标。只改 4 个脚本文件，未动场景/工程设置/XR/Packages。
+- ApiConfig.cs：BaseUrl `127.0.0.1:8080` → `http://192.168.5.29:8080`（手机访问电脑后端的 LAN 地址）。
+- PlaneTapPlacer.cs（新建 4678 字节）：Awake 取 ARRaycastManager（null 则 LogError+禁用）；Update 里 touch Began 优先、鼠标兜底；三重拦截（EventSystem UI → panelRect 矩形 → 左上角 HUD 区 x<500 && y>height-160，命中即 Log "[Tap] 拦截:原因"）；`raycastManager.Raycast(screenPos, hits, TrackableType.PlaneWithinPolygon)` 未命中 Log "[Tap] 未命中平面"；命中则单标记策略（Cube 命名 PlacementMarker，scale 0.08，黄色，pos=pose.position+up*0.04），public LastTapInfo="放置/UI拦截/未命中" 供 HUD。
+- SubmitPanel.cs：删 FakeX/Y/Z 常量；提交前判 `placer==null || !placer.HasMarker` → "请先点击地面放置标记"；坐标 Round3(placer.MarkerPosition)；成功提示带坐标快照 `lastSubmittedPos`（请求发出前赋值，回调显示——首轮编译曾因 markerPos 跨方法引用报 18 条 CS0103，按用户批准方案加字段修复）。
+- SubmitUIBootstrap.cs：panelRoot 改 RectTransform 创建；建 PlaneTapPlacer 注入 panelRect；"本阶段为假坐标"标注改为 SetHint 统一提示（默认"请点击地面放置标记"）。
+- ARDebugHud.cs：面板加"标记: 未放置 / (x,y,z)"与"最近一次点击: 放置/UI拦截/未命中"两行，Box 480×150 与拦截区 (c) 的 160px 对齐。
+
+| 验证 | 原始输出 | 结论 |
+|---|---|---|
+| 首轮编译（s52-import.log） | `error CS 计数: 18`，全部 `SubmitPanel.cs(111-118) CS0103: 'markerPos' does not exist`（我的跨方法作用域失误） | FAIL→停，报告，用户批准修复 |
+| 局部核对 | markerPos 仅 90/98/99/100/106（全在 OnClickSubmit）；lastSubmittedPos 26 声明/106 赋值/115,116,121,122 使用（4 行 6 处 Round3，据实） | PASS |
+| 复编译（s52-import2.log，新名防旧错） | `error CS 计数: 0`；CompileScripts 935ms + Batchmode quit successfully + return code 0（启动时残留空 UnityLockfile，已核实编译真实发生） | PASS |
+| 打包（s5-build3.log，后台+60s 轮询 1 次命中） | `BUILD_RESULT=Succeeded size=352587264 errors=0`；APK `18442892` 字节（>15MB ✓，热缓存增量包 159s）；两日志 error CS 均 0；BaseUrl=192.168.5.29 | PASS |
+
+commit **4c1adfc** `feat(s5.2): 平面点选放置标记 + 三端坐标真实化 + 提交坐标快照`（6 files：ApiConfig/SubmitPanel/SubmitUIBootstrap/ARDebugHud + PlaneTapPlacer.cs/.meta）。
+- 下一步：用户装机验证（对准地面出平面 → 点平面放黄色方块 → 填标题提交 → 管理端核对坐标与现场一致；再验证 UI 上点击不误放、HUD 区点击不误放）。
