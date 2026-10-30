@@ -5,3 +5,6 @@ obj/
 *.csproj
 *.sln
 Builds/
+UserSettings/
+docs/*.log
+docs/*-console.txt
