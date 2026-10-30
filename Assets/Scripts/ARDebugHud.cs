@@ -13,7 +13,7 @@ namespace MvpArSubmitter
         private ARCameraManager cameraManager;
         private string backend = ApiConfig.BaseUrl;
         // 后端连通状态：每 5 秒探测一次 /api/health。
-        private string backendState = "检测中…";
+        private string backendState = "探测#0";
 
         private void Start()
         {
@@ -24,22 +24,48 @@ namespace MvpArSubmitter
                       " planes=" + (planeManager != null) +
                       " camera=" + (cameraManager != null) +
                       " backend=" + backend);
+            backendState = "探测已启动";
             StartCoroutine(CheckBackendLoop());
         }
 
+        private const float ProbeTimeout = 3f;
+
         private IEnumerator CheckBackendLoop()
         {
-            var wait = new WaitForSeconds(5f);
+            var wait = new WaitForSecondsRealtime(5f);
+            int round = 0;
             while (true)
             {
-                using (UnityWebRequest req = UnityWebRequest.Get(backend + "/api/health"))
+                round++;
+                string url = backend + "/api/health";
+                backendState = "探测#" + round + " 中…";
+                UnityWebRequest req = UnityWebRequest.Get(url);
+                req.timeout = 3;
+                UnityWebRequestAsyncOperation op = req.SendWebRequest();
+                float t0 = Time.realtimeSinceStartup;
+                while (!op.isDone && Time.realtimeSinceStartup - t0 < ProbeTimeout)
                 {
-                    req.timeout = 5;
-                    yield return req.SendWebRequest();
-                    backendState = req.result == UnityWebRequest.Result.Success
-                        ? "已连通"
-                        : "未连通(" + req.error + ")";
+                    yield return null;
                 }
+                float cost = Time.realtimeSinceStartup - t0;
+                if (!op.isDone)
+                {
+                    req.Abort();
+                    backendState = "未连通(硬超时 " + cost.ToString("F1") + "s) #" + round;
+                    Debug.LogError("[Hud] 探测#" + round + " 硬超时 " + cost.ToString("F2") + "s url=" + url);
+                }
+                else if (req.result == UnityWebRequest.Result.Success && req.responseCode == 200)
+                {
+                    backendState = "已连通 #" + round + " " + cost.ToString("F1") + "s";
+                    Debug.Log("[Hud] 探测#" + round + " OK " + cost.ToString("F2") + "s");
+                }
+                else
+                {
+                    backendState = "未连通(HTTP" + req.responseCode + " " + req.result + ") #" + round;
+                    Debug.LogError("[Hud] 探测#" + round + " 失败 HTTP=" + req.responseCode +
+                                   " result=" + req.result + " err=" + req.error);
+                }
+                req.Dispose();
                 yield return wait;
             }
         }

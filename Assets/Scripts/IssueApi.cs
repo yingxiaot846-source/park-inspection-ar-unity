@@ -62,11 +62,26 @@ namespace MvpArSubmitter
 
         private static IEnumerator SubmitRoutine(CreateIssueRequest data, Action<SubmitResult> onComplete)
         {
-            using (UnityWebRequest request = BuildCreateRequest(data))
+            UnityWebRequest request = BuildCreateRequest(data);
+            UnityWebRequestAsyncOperation op = request.SendWebRequest();
+            // 不用 yield return op：部分安卓设备/Unity 版本下该回调可能永不到达。
+            // 改为手写硬超时轮询，超时主动 Abort，宁可报「无法连接后端」也不能永久卡住。
+            float deadline = Time.realtimeSinceStartup + 12f;
+            while (!op.isDone && Time.realtimeSinceStartup < deadline)
             {
-                yield return request.SendWebRequest();
-                onComplete(Parse(request));
+                yield return null;
             }
+            if (!op.isDone)
+            {
+                request.Abort();
+                request.Dispose();
+                Debug.LogError("[IssueApi] 提交硬超时 12s，已 Abort URL=" + ApiConfig.BaseUrl + "/api/issues");
+                if (onComplete != null) onComplete(Fail(0, UnreachableMessage, null));
+                yield break;
+            }
+            SubmitResult result = Parse(request);
+            request.Dispose();
+            if (onComplete != null) onComplete(result);
         }
 
         // 提交与自动化验证共用同一份请求构建逻辑，保证发出去的 JSON 完全一致。
