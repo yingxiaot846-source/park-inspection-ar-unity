@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -61,10 +60,19 @@ namespace MvpArSubmitter
             // 优先级。
             Text priorityLabel = CreateText(canvasGo.transform, "PriorityLabel", "优先级", font, 24, TextAnchor.MiddleLeft);
             Place(priorityLabel.rectTransform, new Vector2(100f, 520f), new Vector2(160f, 40f));
-            Dropdown priorityDropdown = CreateDropdown(canvasGo.transform, "PriorityDropdown", font);
-            priorityDropdown.AddOptions(new List<string> { "低", "中", "高" });
-            priorityDropdown.value = 1;
-            Place(priorityDropdown.GetComponent<RectTransform>(), new Vector2(420f, 520f), new Vector2(240f, 40f));
+            // 优先级：三个互斥按钮，替代 Dropdown（手写 Dropdown 结构过于脆弱）。
+            string[] priorityLabels = { "低", "中", "高" };
+            Button[] priorityButtons = new Button[priorityLabels.Length];
+            for (int i = 0; i < priorityLabels.Length; i++)
+            {
+                int index = i; // 闭包捕获必须复制到局部变量
+                Button button = CreateButton(canvasGo.transform, "PriorityButton" + i, priorityLabels[i], font);
+                Place(button.GetComponent<RectTransform>(), new Vector2(420f + i * 110f, 520f), new Vector2(100f, 40f));
+                button.onClick.AddListener(() => panel.SetPriority(index));
+                priorityButtons[i] = button;
+            }
+            panel.priorityButtons = priorityButtons;
+            panel.SetPriority(1);
 
             // 假坐标标注。
             Text fakeNote = CreateText(canvasGo.transform, "FakePosNote", "本阶段为假坐标 (1.0, 0.0, 1.0)", font, 18, TextAnchor.MiddleLeft);
@@ -79,10 +87,16 @@ namespace MvpArSubmitter
             Text resultText = CreateText(canvasGo.transform, "ResultText", string.Empty, font, 24, TextAnchor.MiddleLeft);
             Place(resultText.rectTransform, new Vector2(100f, 340f), new Vector2(880f, 40f));
 
+            // 输入回显：与输入框本身的渲染互相独立，用于证明键盘输入确实进入了 InputField。
+            Text echoText = CreateText(canvasGo.transform, "EchoText", string.Empty, font, 18, TextAnchor.MiddleLeft);
+            echoText.color = new Color(0.75f, 0.85f, 1f, 1f);
+            Place(echoText.rectTransform, new Vector2(100f, 380f), new Vector2(880f, 28f));
+            titleInput.onValueChanged.AddListener(v => { echoText.text = "输入回显: [" + v + "]"; });
+            descInput.onValueChanged.AddListener(v => { echoText.text = "输入回显: [" + v + "]"; });
+
             // 字段绑定（代码内完成，不依赖 Inspector 拖拽）。
             panel.titleInput = titleInput;
             panel.descInput = descInput;
-            panel.priorityDropdown = priorityDropdown;
             panel.submitButton = submitButton;
             panel.resultText = resultText;
             submitButton.onClick.AddListener(panel.OnClickSubmit);
@@ -138,22 +152,24 @@ namespace MvpArSubmitter
             textGo.transform.SetParent(go.transform, false);
             Text text = textGo.AddComponent<Text>();
             text.font = font;
-            text.fontSize = 22;
+            text.fontSize = 20;
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleLeft;
             text.supportRichText = false;
-            Stretch(text.rectTransform, 10f);
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            StretchAsym(text.rectTransform, 12f, 6f);
 
             GameObject placeholderGo = new GameObject("Placeholder");
             placeholderGo.transform.SetParent(go.transform, false);
             Text placeholderText = placeholderGo.AddComponent<Text>();
             placeholderText.font = font;
-            placeholderText.fontSize = 22;
+            placeholderText.fontSize = 20;
             placeholderText.fontStyle = FontStyle.Italic;
             placeholderText.color = new Color(1f, 1f, 1f, 0.35f);
             placeholderText.alignment = TextAnchor.MiddleLeft;
             placeholderText.text = placeholder;
-            Stretch(placeholderText.rectTransform, 10f);
+            placeholderText.verticalOverflow = VerticalWrapMode.Overflow;
+            StretchAsym(placeholderText.rectTransform, 12f, 6f);
 
             input.textComponent = text;
             input.placeholder = placeholderText;
@@ -175,103 +191,20 @@ namespace MvpArSubmitter
             return button;
         }
 
-        // 复刻 Unity 默认 Dropdown 预制体的最小可用结构（Template 必须为 inactive）。
-        private static Dropdown CreateDropdown(Transform parent, string name, Font font)
-        {
-            GameObject go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            Image background = go.AddComponent<Image>();
-            background.color = new Color(0.15f, 0.15f, 0.18f, 1f);
-            Dropdown dropdown = go.AddComponent<Dropdown>();
-
-            Text caption = CreateText(go.transform, "Label", string.Empty, font, 22, TextAnchor.MiddleLeft);
-            caption.color = Color.white;
-            Stretch(caption.rectTransform, 10f);
-
-            // Template（inactive）：ScrollRect + Viewport(Mask) + Content + Item(Toggle)。
-            GameObject template = new GameObject("Template");
-            template.transform.SetParent(go.transform, false);
-            Image templateImage = template.AddComponent<Image>();
-            templateImage.color = new Color(0.12f, 0.12f, 0.15f, 1f);
-            ScrollRect scroll = template.AddComponent<ScrollRect>();
-            RectTransform templateRect = template.GetComponent<RectTransform>();
-            templateRect.anchorMin = new Vector2(0f, 0f);
-            templateRect.anchorMax = new Vector2(1f, 0f);
-            templateRect.pivot = new Vector2(0.5f, 1f);
-            templateRect.anchoredPosition = new Vector2(0f, -2f);
-            templateRect.sizeDelta = new Vector2(0f, 120f);
-
-            GameObject viewport = new GameObject("Viewport");
-            viewport.transform.SetParent(template.transform, false);
-            viewport.AddComponent<Image>().color = Color.white;
-            viewport.AddComponent<Mask>().showMaskGraphic = false;
-            RectTransform viewportRect = viewport.GetComponent<RectTransform>();
-            viewportRect.anchorMin = Vector2.zero;
-            viewportRect.anchorMax = Vector2.one;
-            viewportRect.sizeDelta = Vector2.zero;
-
-            GameObject content = new GameObject("Content");
-            content.transform.SetParent(viewport.transform, false);
-            RectTransform contentRect = content.AddComponent<RectTransform>();
-            contentRect.anchorMin = new Vector2(0f, 1f);
-            contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0.5f, 1f);
-            contentRect.sizeDelta = new Vector2(0f, 0f);
-
-            GameObject item = new GameObject("Item");
-            item.transform.SetParent(content.transform, false);
-            Image itemBackground = item.AddComponent<Image>();
-            itemBackground.color = new Color(0.2f, 0.2f, 0.25f, 1f);
-            Toggle itemToggle = item.AddComponent<Toggle>();
-            RectTransform itemRect = item.GetComponent<RectTransform>();
-            itemRect.anchorMin = new Vector2(0f, 0.5f);
-            itemRect.anchorMax = new Vector2(1f, 0.5f);
-            itemRect.pivot = new Vector2(0.5f, 0.5f);
-            itemRect.sizeDelta = new Vector2(0f, 28f);
-
-            GameObject checkmarkGo = new GameObject("Item Checkmark");
-            checkmarkGo.transform.SetParent(item.transform, false);
-            Image checkmark = checkmarkGo.AddComponent<Image>();
-            checkmark.color = new Color(0.3f, 0.65f, 1f, 1f);
-            RectTransform checkRect = checkmarkGo.GetComponent<RectTransform>();
-            checkRect.anchorMin = new Vector2(0f, 0.25f);
-            checkRect.anchorMax = new Vector2(0f, 0.75f);
-            checkRect.pivot = new Vector2(0f, 0.5f);
-            checkRect.anchoredPosition = new Vector2(6f, 0f);
-            checkRect.sizeDelta = new Vector2(14f, 0f);
-
-            Text itemLabel = CreateText(item.transform, "Item Label", string.Empty, font, 20, TextAnchor.MiddleLeft);
-            itemLabel.color = Color.white;
-            RectTransform labelRect = itemLabel.rectTransform;
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = new Vector2(28f, 2f);
-            labelRect.offsetMax = new Vector2(-8f, -2f);
-
-            itemToggle.targetGraphic = itemBackground;
-            itemToggle.graphic = checkmark;
-
-            scroll.content = contentRect;
-            scroll.viewport = viewportRect;
-            scroll.horizontal = false;
-            scroll.vertical = true;
-            scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = 18f;
-
-            dropdown.template = templateRect;
-            dropdown.captionText = caption;
-            dropdown.itemText = itemLabel;
-
-            template.SetActive(false);
-            return dropdown;
-        }
-
         private static void Stretch(RectTransform rect, float padding)
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.offsetMin = new Vector2(padding, padding);
             rect.offsetMax = new Vector2(-padding, -padding);
+        }
+
+        private static void StretchAsym(RectTransform rect, float paddingX, float paddingY)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(paddingX, paddingY);
+            rect.offsetMax = new Vector2(-paddingX, -paddingY);
         }
     }
 }

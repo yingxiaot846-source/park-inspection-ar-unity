@@ -17,12 +17,44 @@ namespace MvpArSubmitter
         [Header("场景引用（由 SceneBuilder 绑定）")]
         public InputField titleInput;
         public InputField descInput;
-        public Dropdown priorityDropdown;
+        // 优先级：0=低 1=中 2=高。由三按钮组在运行时写入，默认中。
+        public int priorityIndex = 1;
         public Button submitButton;
         public Text resultText;
 
-        // Dropdown 选项下标 → 契约 priority 枚举（低/中/高）。
+        // 选项下标 → 契约 priority 枚举（低/中/高）。
         private static readonly string[] PriorityValues = { "low", "medium", "high" };
+
+        public Button[] priorityButtons;
+
+        private static readonly Color PriorityNormalColor = new Color(0.2f, 0.45f, 0.8f, 1f);
+        private static readonly Color PrioritySelectedColor = new Color(0.15f, 0.7f, 0.35f, 1f);
+
+        /// <summary>由 UI 按钮调用：设置优先级并刷新三个按钮的高亮。</summary>
+        public void SetPriority(int index)
+        {
+            if (index < 0 || index >= PriorityValues.Length)
+            {
+                return;
+            }
+            priorityIndex = index;
+            if (priorityButtons == null)
+            {
+                return;
+            }
+            for (int i = 0; i < priorityButtons.Length; i++)
+            {
+                if (priorityButtons[i] == null)
+                {
+                    continue;
+                }
+                Image image = priorityButtons[i].GetComponent<Image>();
+                if (image != null)
+                {
+                    image.color = (i == index) ? PrioritySelectedColor : PriorityNormalColor;
+                }
+            }
+        }
 
         public void OnClickSubmit()
         {
@@ -38,7 +70,6 @@ namespace MvpArSubmitter
                 return;
             }
 
-            int priorityIndex = priorityDropdown.value;
             if (priorityIndex < 0 || priorityIndex >= PriorityValues.Length)
             {
                 SetResult("优先级无效");
