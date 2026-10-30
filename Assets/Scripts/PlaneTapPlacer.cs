@@ -40,10 +40,16 @@ namespace MvpArSubmitter
         {
             if (Input.touchCount > 0)
             {
-                Touch touch = Input.GetTouch(0);
-                if (touch.phase == TouchPhase.Began)
+                // 遍历全部手指：单手持机时最先按下的那根（握持手）会一直停在 Moved，
+                // 只取 GetTouch(0) 会把真正的点击丢掉。任意一根进入 Began 即处理，一帧只处理一根。
+                for (int i = 0; i < Input.touchCount; i++)
                 {
-                    HandleTap(touch.position, touch.fingerId);
+                    Touch touch = Input.GetTouch(i);
+                    if (touch.phase == TouchPhase.Began)
+                    {
+                        HandleTap(touch.position, touch.fingerId);
+                        break;
+                    }
                 }
             }
             else if (Input.GetMouseButtonDown(0))
