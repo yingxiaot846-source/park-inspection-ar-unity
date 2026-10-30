@@ -175,3 +175,23 @@ APK 内嵌 ARCore 原生库已核实（unzip -l 原始输出）：
 
 commit **4c1adfc** `feat(s5.2): 平面点选放置标记 + 三端坐标真实化 + 提交坐标快照`（6 files：ApiConfig/SubmitPanel/SubmitUIBootstrap/ARDebugHud + PlaneTapPlacer.cs/.meta）。
 - 下一步：用户装机验证（对准地面出平面 → 点平面放黄色方块 → 填标题提交 → 管理端核对坐标与现场一致；再验证 UI 上点击不误放、HUD 区点击不误放）。
+
+## [18] 2026-10-31 S5.3 四处修正 + Marker 材质资产 + vite 验证：打包成功
+
+按用户修正指令落实 4 处改动；未动场景/工程设置/XR/Packages；未重跑 S5Setup.Apply。
+- 改动 1（新建 Assets/Editor/S5MarkerAsset.cs，841 字节）：`Create()` 开头 `IsValidFolder("Assets/Resources")` 为假则 `CreateFolder("Assets","Resources")`，紧跟 `AssetDatabase.Refresh()`（先刷新让 AssetDatabase 认识新目录），再 `Shader.Find("Standard")` → `new Material` → `CreateAsset("Assets/Resources/Marker.mat")` → `SaveAssets` → `Refresh`。
+- 改动 2(b)（PlaneTapPlacer.cs）：拦截 a 从 `IsPointerOverGameObject` 换成 `EventSystem.current.RaycastAll(ped, uiHits)`，`uiHits.Count>0` 即拦（保留 `EventSystem.current != null` 判空），`LastTapInfo="UI拦截(raycast)"`，Log "[Tap] 拦截:UI 射线命中 N 个"。
+- 改动 2(c)（精确删除）：PlaneTapPlacer.cs 删 panelRect 字段及注释与拦截 b 整块（`RectangleContainsScreenPoint`）；SubmitUIBootstrap.cs 删 `placer.panelRect = ...` 及注入注释；panelRoot 注释改回"承载 SubmitPanel 组件"。`grep -rn panelRect Assets/Scripts/` → 无残留。
+- 改动 2(d)：标记材质只做 `Resources.Load<Material>("Marker")` 赋 `sharedMaterial`，未找到则 `Debug.LogError`；不再改 `.color`（黄色在材质创建时定死）。
+- 改动 2(e)+4（ARDebugHud.cs）：拦截 (c) 阈值 `Screen.height-160f` → `-200f`；HUD Box `(10,10,480,150)` → `(10,10,480,190)`；8 行 y=14/34/54/74/94/114/134/154（"后端连通: "插在第 6 行 114），末行 154 底边 174 在 190 内；标题 → "S5.3 诊断面板"；新增 `CheckBackendLoop` 协程每 5s `GET {backend}/api/health`（timeout=5）写 `backendState`（已连通/未连通(err)/检测中…）。
+
+| 步骤 | 原始输出 | 结论 |
+|---|---|---|
+| 生成 Marker.mat（s53-marker.log，-executeMethod S5MarkerAsset.Create） | `error CS 计数: 0`；`[S5MarkerAsset] 已创建 Assets/Resources/Marker.mat`；`ls Assets/Resources` → Marker.mat 2199 字节 + .meta | PASS |
+| 打包（s5-build4.log，后台 + 60s 轮询 1 次命中） | `BUILD_RESULT=Succeeded size=352708500 errors=0`；APK `18470838` 字节（>15MB ✓，增量 274s）；s53-marker/s5-build4 两日志 error CS 均 0 | PASS |
+| Marker 打入 APK | `unzip -l` 无散文件 Marker.mat——预期：Resources 内容序列化进 `assets/bin/Data/sharedassets0.assets`（8748 字节，较上轮增长含新材质） | PASS（说明性核实，非缺失） |
+| 第 3 步 vite（原标注 UNVERIFIED） | `curl -s -o /dev/null -w "HTTP=%{http_code}" http://127.0.0.1:5173/` → `HTTP=200`（首次 curl 即中，未重试，未触发 UNVERIFIED 分支）；vite-dev.log：`VITE v5.4.21 ready in 1201ms` + Local http://localhost:5173/ | PASS |
+
+- 涉及文件：Assets/Editor/S5MarkerAsset.cs（新）、PlaneTapPlacer.cs、SubmitUIBootstrap.cs、ARDebugHud.cs、Assets/Resources/Marker.mat（生成物）。
+- vite dev server 在后台运行（sandbox mvp/web，/api 代理 → 127.0.0.1:8080）；手机访问 admin 需 `--host`（vite 默认只绑 localhost，本轮未要求，未改）。
+- 下一步：commit → 用户装机验证（UI 点击 Logcat "[Tap] 拦截:UI 射线命中 N 个"；HUD 区不误放；Marker 材质缺失则 LogError；后端连通行 5s 刷新）。

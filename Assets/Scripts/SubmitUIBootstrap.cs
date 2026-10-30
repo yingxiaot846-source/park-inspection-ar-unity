@@ -43,7 +43,7 @@ namespace MvpArSubmitter
                 eventSystem.AddComponent<StandaloneInputModule>();
             }
 
-            // 根面板：承载 SubmitPanel 组件（用 RectTransform 创建，供 PlaneTapPlacer 第二重拦截注入）。
+            // 根面板：承载 SubmitPanel 组件。
             GameObject panelRoot = new GameObject("SubmitPanel", typeof(RectTransform));
             SubmitPanel panel = panelRoot.AddComponent<SubmitPanel>();
 
@@ -113,10 +113,9 @@ namespace MvpArSubmitter
             panel.resultText = resultText;
             submitButton.onClick.AddListener(panel.OnClickSubmit);
 
-            // 点击放置器：手指点平面放标记；注入提交面板矩形（第二重 UI 拦截用）。
+            // 点击放置器：手指点平面放标记。
             GameObject placerGo = new GameObject("PlaneTapPlacer");
-            PlaneTapPlacer placer = placerGo.AddComponent<PlaneTapPlacer>();
-            placer.panelRect = panelRoot.GetComponent<RectTransform>();
+            placerGo.AddComponent<PlaneTapPlacer>();
 
             Debug.Log("[SubmitUIBootstrap] 提交界面已创建（AR 点击放置标记阶段）");
         }
