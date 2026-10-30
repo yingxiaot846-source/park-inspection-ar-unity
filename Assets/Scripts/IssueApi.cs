@@ -35,10 +35,29 @@ namespace MvpArSubmitter
         {
             using (UnityWebRequest request = BuildCreateRequest(data))
             {
-                UnityWebRequestAsyncOperation op = request.SendWebRequest();
-                while (!op.isDone) { System.Threading.Thread.Sleep(10); }
+                WaitBounded(request);
                 return Parse(request);
             }
+        }
+
+        /// <summary>
+        /// 主线程阻塞等待请求结束。2022.3 没有提供同步等待方法，这里用有上限的轮询；
+        /// 超过上限主动 Abort，保证 batchmode 绝不会无限挂住。
+        /// </summary>
+        public static bool WaitBounded(UnityWebRequest request, int timeoutMs = 15000)
+        {
+            UnityWebRequestAsyncOperation op = request.SendWebRequest();
+            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+            while (!op.isDone && sw.ElapsedMilliseconds < timeoutMs)
+            {
+                System.Threading.Thread.Sleep(5);
+            }
+            if (!op.isDone)
+            {
+                request.Abort();
+                return false;
+            }
+            return true;
         }
 
         private static IEnumerator SubmitRoutine(CreateIssueRequest data, Action<SubmitResult> onComplete)

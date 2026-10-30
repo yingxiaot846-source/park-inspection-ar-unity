@@ -60,3 +60,24 @@
 2. `IssueApi.cs:38` 与 `Assets/Editor/S4TestRunner.cs:64` 使用了本机 Unity 2022.3.62f3c1 不存在的 `AsyncOperation.WaitForCompletion()`（CS1061），同属被掩盖的历史问题；均改为 `UnityWebRequestAsyncOperation op = ...; while (!op.isDone) { Thread.Sleep(10); }`（request.timeout=8 兜底，不会死等）。
 3. 调用参数问题：`-executeMethod S4TestRunner.Run` 短名找不到类，须用全名 `MvpArSubmitter.S4TestRunner.Run`（代码未改，命令修正，重试 1 次内解决）。
 - 下一步：等用户确认后进入 Play 模式人工验证（SubmitUIBootstrap 运行时 UI + 空标题拦截 + 真实提交），或直接进入 S5（AR 集成）。
+
+## [3] 2026-10-30 WaitForCompletion 重构为 WaitBounded（有上限+Abort），全套复验通过
+
+说明：[2] 轮已用无上限轮询跑通；本轮按用户规格重构为 `WaitBounded`（15 秒上限 + Abort 硬保险 + 返回 bool），三处调用点统一，然后完整重跑步骤 2-6。
+
+| 检查项 | 命令 | 退出码 | 关键输出 | 结论(PASS/FAIL) |
+|---|---|---|---|---|
+| 改动1 IssueApi.cs 两处 | Edit：SubmitSync 内改 `WaitBounded(request);`；SubmitRoutine 前新增 `public static bool WaitBounded(UnityWebRequest request, int timeoutMs = 15000)`（Stopwatch 上限，超时 `request.Abort()` 返回 false） | — | 30-60 行原文已贴（WaitBounded 调用 + 方法全文） | PASS |
+| 改动2 S4TestRunner.cs 一处 | Edit：FetchTotal 内 `request.timeout = 8;` 后改 `IssueApi.WaitBounded(request);`（其后 result 判断未动） | — | 55-72 行原文已贴 | PASS |
+| grep WaitForCompletion | `grep -rn "WaitForCompletion" Assets` | 首跑 grep 0（1 匹配） | 唯一匹配=IssueApi.cs:44 XML 注释文字「2022.3 没有 WaitForCompletion」（非代码调用）；按 0 匹配判据将注释措辞改为「2022.3 没有提供同步等待方法」（只改注释，如实披露） | FAIL→修正 |
+| grep WaitForCompletion 复查 | `grep -rn "WaitForCompletion" Assets` | grep 1 | 空输出（0 匹配） | PASS |
+| 导入编译 | `Unity.exe -batchmode -quit -projectPath ... -logFile docs/s4-import.log` | EXIT=0 | `EXIT=0` | PASS |
+| 判据1 无 CS 错误 | `grep -c "error CS" docs/s4-import.log` | grep 1 | `0`（无匹配） | PASS |
+| 判据2 MovedFromExtractor | `grep -c "ApiUpdater.MovedFromExtractor" docs/s4-import.log` | grep 1 | `0`（无匹配） | PASS |
+| 后端 health | `curl -s http://127.0.0.1:8080/api/health` | 0 | `{"status":"ok","time":"2026-10-30T11:17:48Z"}` | PASS |
+| 基线 before | `curl -s http://127.0.0.1:8080/api/issues` | 0 | `"total":3`（e733b2d1 上轮测试记录 / 1fad3f5b / 33a4dccd） | PASS |
+| S4 自动化提交 | `Unity.exe ... -executeMethod MvpArSubmitter.S4TestRunner.Run` | EXIT=0 | `Logs/s4-test.log`：`HTTP 状态码: 201`/`成功: True`/`issues.json 对应条数: 前=3 后=4`/返回 id `800ea542-fdd7-4e74-bc94-08746ef6b59d`；命令立即返回，无 ~15 秒挂住（用户预告的三种阻塞征兆均未出现） | PASS |
+| 外部独立确认 | `curl -s http://127.0.0.1:8080/api/issues` | 0 | `"title":"S4-自动测试-20261030-191809"`、`"position":{"x":1,"y":0,"z":1}`（y=0）、`"total":4`（= before+1） | PASS |
+
+本轮发现并修复的问题：WaitForCompletion（CS1061）按用户规格统一收敛为 `IssueApi.WaitBounded`（上限 15s + Abort + bool 返回），消除无上限轮询在极端情况（timeout 字段失效）下 batchmode 无限挂住的理论风险；附带把 XML 注释里的 API 名改写以满足 grep 0 匹配判据（已如实披露，非代码改动）。
+- 下一步：等用户确认 → Play 模式人工验证（运行时 UI）或进 S5（AR 集成）。
