@@ -100,3 +100,23 @@
 - 已停止：未执行第 2 节 ARCore 检查、未发起 APK 构建（15-25 分钟的包打出来也达不到 S5.1 目标）。
 - 涉及文件：仅本文件（未修改任何 .cs 源文件）
 - 下一步：等用户选择修复方式（GUI 给 XR Origin 手工加 ARPlaneManager 并存场景，或授权改 S5Setup.cs 加 AddComponent 兜底）→ 再续跑第 2-5 节。
+
+## [5] 2026-10-30 S5.1 v3：第 1 节四判据全 PASS；第 2 节 ARCore 检查 → 分支 B 停止
+
+S5Setup.cs 已由外部定稿（132 行 / 6093 字节，新增 87-111 行「补挂 ARPlaneManager / ARRaycastManager」）。重跑 `S5Setup.Apply`（新日志 docs/s5-setup3.log，EXIT=0 仅记录不作判据）。
+
+| 判据 | 实际输出 | 结论 |
+|---|---|---|
+| a) `grep -c "\[S5Setup\] 完成"` | `1` | PASS |
+| b) `grep -c "error CS"` | `0` | PASS |
+| c) `[S5Setup]` 全部行 | 玩家设置完成 / activeInputHandler 当前=2 / 菜单命令返回 okA=True okB=True / 补挂 ARPlaneManager（菜单版缺失） / 补挂 ARRaycastManager（菜单版缺失） / 管理器数量 plane=1 raycast=1 / 相机清点 name=Main Camera ARCameraManager=True ARCameraBackground=True / 校验 session=True xrorigin=True planeMgr=True hud=True / 完成：Assets/Scenes/Main.unity 已创建并加入 Build Settings | PASS（三条必需行全部出现） |
+| d) `ls Assets/Scenes` | Main.unity + Main.unity.meta | PASS |
+| 停止条件检查 | 兜底=0；警告：找不到 XROrigin=0；Batchmode quit successfully=1 | 全干净 |
+
+第 2 节 ARCore 启用检查（三条只读命令）：
+- `grep -r "ARCoreLoader" Assets/XR` → 无输出（0 匹配）
+- `ls Assets/XR/Settings` → 无输出（目录不存在）
+- `grep -n "ARCore" ProjectSettings/ProjectSettings.asset` → 无输出（0 匹配）
+→ **分支 B：工程未启用 ARCore loader**。按指令停止，未发起第 3/4 节 APK 构建，已原样转达 GUI 操作给用户。
+- 涉及文件：仅本文件（未修改任何 .cs 源文件、未动 manifest.json / XR 配置）
+- 下一步：用户 GUI 勾选 ARCore 后 → 续跑第 3 节后台打包 + 第 4 节轮询。
