@@ -81,3 +81,22 @@
 
 本轮发现并修复的问题：WaitForCompletion（CS1061）按用户规格统一收敛为 `IssueApi.WaitBounded`（上限 15s + Abort + bool 返回），消除无上限轮询在极端情况（timeout 字段失效）下 batchmode 无限挂住的理论风险；附带把 XML 注释里的 API 名改写以满足 grep 0 匹配判据（已如实披露，非代码改动）。
 - 下一步：等用户确认 → Play 模式人工验证（运行时 UI）或进 S5（AR 集成）。
+
+## [4] 2026-10-30 S5.1 第 1 节 S5Setup.Apply：停止（判据 c 未达标 planeMgr=False）
+
+按「S5.1 续跑指令」第 1 节执行一次 `Unity.exe -batchmode -quit -executeMethod S5Setup.Apply -logFile docs/s5-setup.log`（EXIT=0，仅记录不作判据）。
+
+| 判据 | 命令 | 实际输出 | 结论(PASS/FAIL) |
+|---|---|---|---|
+| a) `grep -c "S5Setup 完成"` | 期望 1 | `0`（无匹配）；但 c) 中第 4629 行存在完成行原文 `[S5Setup] 完成：Assets/Scenes/Main.unity 已创建并加入 Build Settings`——日志实际写的是 `[S5Setup] 完成：`，模式串 `S5Setup 完成` 中间隔了 `] ` 导致 grep 不命中，属判据模式笔误非执行缺失 | FAIL（模式笔误，执行实际完成） |
+| b) `grep -c "error CS"` | 期望 0 | `0` | PASS |
+| c) `grep "\[S5Setup\]"` | 贴全部行 | 4570 `[S5Setup] 玩家设置完成`；4579 `[S5Setup] activeInputHandler 已改为 2 (Both)`；4594 `[S5Setup] 菜单命令返回 okA=True okB=True`；4620 `[S5Setup] 校验 session=True xrorigin=True planeMgr=False hud=True`；4629 `[S5Setup] 完成：...`。**要求 planeMgr=True 实际为 False** | FAIL |
+| d) `ls Assets/Scenes` | 存在 Main.unity | `Main.unity` + `Main.unity.meta` | PASS |
+| 兜底分支日志 | `grep -c "兜底"` | `1` 无匹配（未出现） | 无兜底 |
+| quit 证据 | `grep -c "Batchmode quit successfully"` | `1`（4638 行）；前后 30 行已贴，含 4620/4629 两行 + `at S5Setup.Apply() (at Assets/Editor/S5Setup.cs:101/:105)` 调用栈，证实 -executeMethod 真实执行 | PASS |
+
+场景只读检查：`m_Name` 列表 = XR Origin / AR Session / Main Camera / Camera Offset / ARDebugHud；场景文本 grep ARPlaneManager/ARSession/AROrigin 均 0（YAML 按 GUID 引用，文本 grep 不作准，以编辑器内 FindObjectOfType 校验为准 → planeMgr=False 为权威结论）。
+- 判断：okA=True okB=True 说明 ExecuteMenuItem 在 batchmode 下生效（新发现，记录在案）；但 XR Origin (Mobile AR) 菜单创建出的场景**缺 ARPlaneManager 组件**，平面检测将不可用（HUD 会显示 -1 个）。
+- 已停止：未执行第 2 节 ARCore 检查、未发起 APK 构建（15-25 分钟的包打出来也达不到 S5.1 目标）。
+- 涉及文件：仅本文件（未修改任何 .cs 源文件）
+- 下一步：等用户选择修复方式（GUI 给 XR Origin 手工加 ARPlaneManager 并存场景，或授权改 S5Setup.cs 加 AddComponent 兜底）→ 再续跑第 2-5 节。
