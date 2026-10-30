@@ -120,3 +120,20 @@ S5Setup.cs 已由外部定稿（132 行 / 6093 字节，新增 87-111 行「补�
 → **分支 B：工程未启用 ARCore loader**。按指令停止，未发起第 3/4 节 APK 构建，已原样转达 GUI 操作给用户。
 - 涉及文件：仅本文件（未修改任何 .cs 源文件、未动 manifest.json / XR 配置）
 - 下一步：用户 GUI 勾选 ARCore 后 → 续跑第 3 节后台打包 + 第 4 节轮询。
+
+## [15] 2026-10-30 S5.1 第一次 Android 打包：FAIL（Vulkan 与 ARCore 不兼容）
+
+第 0 步 .gitignore 追加 `Builds/` 并提交（b733a96）；第 1 步三判据全过（`Assets/XR/Loaders/ARCoreLoader.asset` 401 字节存在、`m_InitManagerOnStart: 1`（XRGeneralSettingsPerBuildTarget.asset 第 31 行）、`D:\Unity job\2022.3.62f3c1\Editor\Unity.exe` 存在）；第 2 步后台发起 `S5Build.Build`（未前台等待，日志 Logs/s5-build.log）；第 3 步轮询约 2 分钟出结果。
+
+| 检查项 | 原始输出 | 结论 |
+|---|---|---|
+| `grep "BUILD_RESULT=" Logs/s5-build.log` | `BUILD_RESULT=Failed size=0 errors=2` | FAIL |
+| `ls -lh Builds/mvp-ar.apk` | 无文件（NO_APK） | FAIL |
+| `grep -c "error CS"` | `0` | 无 C# 编译错误 |
+| 失败标记扫描 | 仅第 1 行 `[Licensing::Module] Trying to connect to existing licensing client channel...`（启动期正常连接消息，非错误） | 无 Gradle build failed / CommandInvokationFailure / SDK-NDK-JDK / Keystore 类失败 |
+| 根因（374 行原文） | `Error building Player: BuildFailedException: You have enabled the Vulkan graphics API, which is not supported by ARCore.`（来源 `./Library/PackageCache/com.unity.xr.arcore@5.1.5/Editor/ARCoreBuildProcessor.cs Line: 151`） | 已定位 |
+
+耗时：后台发起到出现 BUILD_RESULT 约 2 分钟（失败发生在 Preprocess Player 阶段 `duration:369ms`，未进入 Gradle/IL2CPP，故远快于正常首包 8-25 分钟）。
+- 涉及文件：.gitignore、docs/PROGRESS.md（**未修改任何 .cs 源文件**，未改 ProjectSettings，未删 Library，未装包）
+- 判断：S5Setup 写入的图形 API 列表为 Vulkan + GLES3，ARCore 5.1.5 构建前置直接拒绝 Vulkan。需将 Android 图形 API 改为仅 OpenGLES3 才能出包。本轮禁改工程设置与代码，停在此处等裁定。
+- 下一步：等用户裁定改法（改 S5Setup.cs 图形 API 列表 / 用户 GUI 手改 Player Settings > Graphics APIs 为 OpenGLES3 only）→ 重跑第 2-4 步。
