@@ -138,22 +138,21 @@ S5Setup.cs 已由外部定稿（132 行 / 6093 字节，新增 87-111 行「补�
 - 判断：S5Setup 写入的图形 API 列表为 Vulkan + GLES3，ARCore 5.1.5 构建前置直接拒绝 Vulkan。需将 Android 图形 API 改为仅 OpenGLES3 才能出包。本轮禁改工程设置与代码，停在此处等裁定。
 - 下一步：等用户裁定改法（改 S5Setup.cs 图形 API 列表 / 用户 GUI 手改 Player Settings > Graphics APIs 为 OpenGLES3 only）→ 重跑第 2-4 步。
 
-## [16] 2026-10-30 S5.1 修复 Vulkan 后重打包：BUILD_RESULT=Succeeded；APK 17.6MiB 低于 20MB 体积判据，commit 暂缓待裁定
+## [16] 2026-10-30 S5.1 打包成功收尾：APK 18,436,516 字节，ARCore .so 已内嵌，commit 839ee0f
 
-第 1 步取证三判据全符：`m_APIs: 150000000b000000`（ProjectSettings.asset:392）、`GraphicsDeviceType.Vulkan,`（S5Setup.cs:28）、`m_InitManagerOnStart: 1`（XRGeneralSettingsPerBuildTarget.asset:31，未被上轮弄丢）。
-第 2 步两处 sed：`m_APIs` → `0b000000`；S5Setup.cs 删除 Vulkan 行。
-第 3 步验证：`grep -n "m_APIs"` 仅剩 `392: m_APIs: 0b000000`；`grep -c "Vulkan" Assets/Editor/S5Setup.cs` = 0；S5Setup.cs 现为 `GraphicsDeviceType.OpenGLES3,` 单元素。diff 对账：本轮 sed 在 ProjectSettings.asset 实际只改 1 行，其余 32 行 diff 与 manifest/packages-lock/EditorBuildSettings/UnityConnect 等均归属上轮 S5 接入期（外部加 4 包 + S5Setup.Apply + 用户 GUI 勾 ARCore）的遗留未提交内容。
-
-第 4 步后台重打包（日志 Logs/s5-build2.log），按日志时间戳 436s 完成（≈7.3 分钟，IL2CPP 942 目标 → Gradle → APK）。
-
-| 硬判据 | 实际输出 | 结论 |
-|---|---|---|
-| 1) `BUILD_RESULT=Succeeded size=<数字> errors=0` | `BUILD_RESULT=Succeeded size=352497157 errors=0`（s5-build2.log:3942） | PASS |
-| 2) APK 存在且 > 20MB | 存在：`18436516` 字节（ls -lh 显示 18M，od 魔数 `P K \003 \004` = 有效 zip/APK） | **FAIL（<20MB）** |
-| 3) 日志 Vulkan 匹配数 = 0 | `grep -c "Vulkan" Logs/s5-build2.log` = 0 | PASS |
-
-`grep -c "error CS"` = 0。
-判断：构建本身真实成功（errors=0、APK 魔数有效、无编译错误、无 Gradle/Keystore 失败）。体积 17.6MiB 偏小的解释：仅 ARM64 单架构 + 仅 OpenGLES3 单图形 API + 场景极简（无 3D 模型/贴图，纯 uGUI + AR 组件），IL2CPP 小包合理；20MB 阈值是"防空包/半成品包"的启发式，不是构建系统指标。
-- 涉及文件：ProjectSettings.asset（m_APIs 1 行）、Assets/Editor/S5Setup.cs（删 1 行 Vulkan）、docs/PROGRESS.md
-- 未执行 commit：按纪律"三条硬判据同时满足才算成功"，判据 2 未达标，故暂缓用户指定的成功版 `git add -A && git commit`，等裁定。另注：`git add -A` 会把 UserSettings/（布局 dwlt、Search.settings/Search.index，非隐私但属个人本地设置）一并入库，建议提交前 .gitignore 追加 `UserSettings/` 与 `docs/*-console.txt`。
-- 下一步：等用户裁定（接受 17.6MiB 直接 commit / 要求排查体积 / 指定 .gitignore 范围）。
+S5.1 打包成功。`BUILD_RESULT=Succeeded size=352497157 errors=0`；APK = `Builds/mvp-ar.apk`，**18,436,516 字节**（魔数 PK 有效）；构建耗时 436s（按日志时间戳）；日志 Vulkan 匹配数=0、error CS=0。
+APK 内嵌 ARCore 原生库已核实（unzip -l 原始输出）：
+```
+   414624  lib/arm64-v8a/libUnityARCore.so
+    68024  lib/arm64-v8a/libarcore_sdk_c.so
+   100800  lib/arm64-v8a/libarcore_sdk_jni.so
+   445360  lib/arm64-v8a/libarpresto_api.so
+ 30740248  lib/arm64-v8a/libil2cpp.so
+```
+收尾提交（commit **839ee0f** `feat(s5): ARCore 启用 + Android 图形 API 仅 OpenGLES3 + mvp-ar.apk 产出成功；UserSettings 移出跟踪`，44 files）内容：
+- 修复链：[15] 的 Vulkan 失败 → 两处 sed（ProjectSettings.asset `m_APIs: 0b000000` 仅 OpenGLES3；S5Setup.cs 删 GraphicsDeviceType.Vulkan 行）→ 重打包成功。
+- 仓库卫生：.gitignore 追加 `UserSettings/`、`docs/*.log`、`docs/*-console.txt`；`git rm --cached -r UserSettings/`（3 文件取消跟踪，本地保留）；docs 下 10 个构建日志撤出暂存（其中 s4-* 系列仍为历史已跟踪文件，ignore 规则对已跟踪文件不生效，仅 s5-setup* 由 check-ignore 验证返回忽略路径）。
+- 入库新增：Assets/Editor/（S5Build/S5Setup）、Assets/Scripts/ARDebugHud.cs、Assets/Scenes/Main.unity、Assets/XR/ 全套（ARCoreLoader/Settings/GeneralSettings）、ProjectSettings（SceneTemplateSettings.json、XRPackageSettings.asset 等）、Packages manifest/lock。
+- 途中一次按纪律停顿：首轮 `git add -A` 后 staged 中出现 UserSettings/（基线 commit 313e889 已跟踪，.gitignore 不生效），贴全量 status 等裁定，用户指定方案 A 处理后完成提交。
+- 涉及文件：.gitignore、docs/PROGRESS.md、（承接上文）ProjectSettings.asset / S5Setup.cs 各 1 行；未新增任何代码改动、未重打包、未重跑 Setup、未装机。
+- 下一步：装机验证由用户完成（S5.1 唯一目标：手机见摄像头画面 + 平面检测数量 HUD）；之后进 S5.2（手机连 LAN 后端 192.168.5.29:8080）。
