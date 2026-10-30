@@ -13,6 +13,18 @@ namespace MvpArSubmitter
         // Windows 系统字体回退链：中文必须用含字形的字体，内置 LegacyRuntime.ttf 不含中文。
         private static readonly string[] OsFontNames = { "Microsoft YaHei", "SimHei", "Arial" };
 
+        /// <summary>放置引导提示（原"假坐标"标注位置），由 SubmitPanel 经 SetHint 更新。</summary>
+        private static Text hintText;
+
+        /// <summary>统一更新放置引导提示文本。</summary>
+        public static void SetHint(string message)
+        {
+            if (hintText != null)
+            {
+                hintText.text = message;
+            }
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Build()
         {
@@ -31,8 +43,8 @@ namespace MvpArSubmitter
                 eventSystem.AddComponent<StandaloneInputModule>();
             }
 
-            // 根面板：承载 SubmitPanel 组件。
-            GameObject panelRoot = new GameObject("SubmitPanel");
+            // 根面板：承载 SubmitPanel 组件（用 RectTransform 创建，供 PlaneTapPlacer 第二重拦截注入）。
+            GameObject panelRoot = new GameObject("SubmitPanel", typeof(RectTransform));
             SubmitPanel panel = panelRoot.AddComponent<SubmitPanel>();
 
             // 画布。
@@ -74,10 +86,10 @@ namespace MvpArSubmitter
             panel.priorityButtons = priorityButtons;
             panel.SetPriority(1);
 
-            // 假坐标标注。
-            Text fakeNote = CreateText(canvasGo.transform, "FakePosNote", "本阶段为假坐标 (1.0, 0.0, 1.0)", font, 18, TextAnchor.MiddleLeft);
-            fakeNote.color = new Color(0.6f, 0.6f, 0.6f, 1f);
-            Place(fakeNote.rectTransform, new Vector2(420f, 478f), new Vector2(420f, 28f));
+            // 放置引导提示（原"本阶段为假坐标"标注位置）。
+            hintText = CreateText(canvasGo.transform, "PlacementHint", "请点击地面放置标记", font, 18, TextAnchor.MiddleLeft);
+            hintText.color = new Color(0.6f, 0.9f, 0.6f, 1f);
+            Place(hintText.rectTransform, new Vector2(420f, 478f), new Vector2(560f, 28f));
 
             // 提交按钮。
             Button submitButton = CreateButton(canvasGo.transform, "SubmitButton", "提交", font);
@@ -101,7 +113,12 @@ namespace MvpArSubmitter
             panel.resultText = resultText;
             submitButton.onClick.AddListener(panel.OnClickSubmit);
 
-            Debug.Log("[SubmitUIBootstrap] 提交界面已创建（假坐标阶段）");
+            // 点击放置器：手指点平面放标记；注入提交面板矩形（第二重 UI 拦截用）。
+            GameObject placerGo = new GameObject("PlaneTapPlacer");
+            PlaneTapPlacer placer = placerGo.AddComponent<PlaneTapPlacer>();
+            placer.panelRect = panelRoot.GetComponent<RectTransform>();
+
+            Debug.Log("[SubmitUIBootstrap] 提交界面已创建（AR 点击放置标记阶段）");
         }
 
         private static Font GetUiFont()
