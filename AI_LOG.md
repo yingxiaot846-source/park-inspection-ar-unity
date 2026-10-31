@@ -107,3 +107,30 @@
 - 本轮未打 APK；运行时效果（建议刷新/采用生效/手动覆盖/防抖）UNVERIFIED，待装机或 Play 模式验证
 - 本轮 commit：见 git 记录（feat(bonus2) 开头）
 
+### Bonus 2 增量修正与规则验证（第六轮）
+
+- 状态：[LIVE]
+- 阶段：Bonus 2 增量修正（修正三项已确认偏差 + 真实规则测试；不重做功能、不改历史、不打 APK）
+- 基线保护：读取 5 文件 + git 原始输出——`git status --short --untracked-files=all` 空（开工时工作区干净）；`git log -3 --oneline` = e62b7ff / e12988e / 42dfda8；`git show --stat` 确认 e12988e=5 文件（AI_LOG+13、LocalPriorityRules.cs 新+89、SubmitPanel+116、SubmitUIBootstrap+15/−2、PROGRESS+21）、e62b7ff=LocalPriorityRules.cs.meta+11；`git diff --check` 空。未执行任何 reset/amend/rebase/checkout/clean/restore。
+
+三项偏差修正（只改 2 个文件，SubmitUIBootstrap.cs 绑定名未变无需修改）：
+1. **冲突处理**：`Evaluate` 由"标题先命中即返回（Scan(t) ?? Scan(d)）"改为标题+描述逐级共同判断——high 在标题或描述任一命中即 high；否则 medium 任一命中即 medium；否则 low。同级双命中时先扫标题再扫描述，原因文案取标题命中词（只影响原因，不改变等级）。类注释同步更新；删除旧 `Scan` 单文本方法。
+2. **关键词**：high += "砸"、"急"（现 12 词）；medium += "漏水"（现 11 词）；确认 "漏水" 不在 low（low 仍 10 词未动）。除这 3 个词外无其他增删。
+3. **移除 debounce**：删除 `suggestionDirty`/`suggestionEvalAt`/`SuggestionDebounceSeconds` 字段与 `Update()` 方法；`OnInputChanged` 改为直接同步调用 `EvaluateSuggestionNow()`。grep 防抖残留 = 0。
+
+规则测试（**实际执行**，非静态阅读）：项目无测试框架（Packages/manifest.json grep "test" 0 匹配；Assets/Editor 仅 S4/S5 四个脚本，无规则测试入口）。采用 Unity 自带 Mono 编译器真实执行项目源文件：`mono.exe .../lib/mono/4.5/mcs.exe -out:RuleTests.exe RuleTests.cs <项目真实 LocalPriorityRules.cs>` → mcs EXIT=0 → `mono RuleTests.exe` RUN_EXIT=0。10 个指定场景 + 4 个新增关键词场景逐条输出（输入/实际 priority/实际 matched/实际 reason/期望/结论）：
+- T1 配电箱漏电/空→high PASS；T2 空调异常噪音/空→medium PASS；T3 墙面轻微划痕/空→low PASS；T4 墙面划痕/发现配电箱漏电→high（命中:漏电）PASS；T5 空调故障/建议优化外观→medium（命中:故障）PASS；T6 巡检记录/普通巡检记录→matched=false PASS；T7 双空→matched=false 不崩 PASS；T8 双 null→matched=false 不崩 PASS；T9 轻微划痕+设备故障并有漏电危险→high PASS；T10 照明设备异常/存在坠落危险→high（命中:坠落）PASS；附加 KA_ZA 被砸→high(砸) PASS、KA_JI 紧急→high(紧急) PASS、KA_LOUSHUI 天花板漏水→medium(漏水) PASS、KA_LOUSHUI_LOW 轻微划痕+地面漏水→medium（证明漏水不在 low）PASS。
+- **规则测试结论：PASS（14/14，真实执行项目源文件）**；测试 harness 位于沙箱 mvp\ruletests\（项目目录外，未入库）。
+
+第三节不变式检查（grep 原始输出）：PriorityValues 单一定义 1 处（line 21）+ 3 处使用（IndexOf/Length/priorityIndex）无第二套映射；SetPriority→manualLocked=true→ApplyPriority（line 41-45）；OnAdoptSuggestion 走 ApplyPriority 且不置 manualLocked（line 55-68）；无匹配/非法 priority 时 OnAdoptSuggestion 提前 return（line 57-64），采用按钮无匹配时 interactable=false（RefreshSuggestionDisplay）；提交仍 `PriorityValues[priorityIndex]`（line 199）；输入变化不触碰 priorityIndex（EvaluateSuggestionNow 只写 lastSuggestion+刷新显示）。
+
+Bonus 1 兼容性（静态证据）：GetTouch(i)=152 / GetTouch(0) 仅注释 149 / PlaneWithinPolygon=194 / RaycastAll=176 / ApplyIssueStyle 定义 PlaneTapPlacer:118、成功分支调用 SubmitPanel:231 / SetCurrentPriority 定义 :106、调用 :141；PlaneTapPlacer/IssueApi/IssueModels/ApiConfig `git diff --name-only` 空（零改动）；BaseUrl 仍 `http://192.168.5.29:8080` → **PASS（静态）**。
+
+编译：`Logs/bonus2b-import.log`（新名）→ **errorCS=0、`313: CompileScripts: 1613.299ms`、Batchmode quit successfully=1 → PASS**；BUILD_RESULT=无（本轮仅编译不打包，编译日志无此字段属预期）。编译 PASS ≠ 运行时通过。
+
+git：`git diff --check` 空 EXIT=0；`git status` 仅 ` M LocalPriorityRules.cs`、` M SubmitPanel.cs`；`git diff --stat` 2 files +17/−33；`git diff --name-only` 恰为该 2 文件 → 范围符合。
+
+- **本轮结论：规则测试 PASS（14/14 真实执行）；编译 PASS；静态不变式+Bonus 1 兼容性 PASS；Play/真机 UNVERIFIED；本轮未打 APK。**
+- 涉及文件：Assets/Scripts/LocalPriorityRules.cs、SubmitPanel.cs、AI_LOG.md、docs/PROGRESS.md（台账追加）。
+- Bonus 2 剩余 UNVERIFIED：建议实时刷新、采用生效、手动覆盖的 Play/真机行为（需装机，本轮禁打 APK）。
+

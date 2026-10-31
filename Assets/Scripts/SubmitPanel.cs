@@ -37,11 +37,6 @@ namespace MvpArSubmitter
         private PrioritySuggestion lastSuggestion;
         private bool manualLocked;
 
-        // 建议防抖：输入停止 0.4 秒后评估一次，避免逐字符跑规则。
-        private bool suggestionDirty;
-        private float suggestionEvalAt;
-        private const float SuggestionDebounceSeconds = 0.4f;
-
         /// <summary>由 低/中/高 按钮调用：视为手动选择，停止自动建议刷新。</summary>
         public void SetPriority(int index)
         {
@@ -72,24 +67,13 @@ namespace MvpArSubmitter
             RefreshSuggestionDisplay();
         }
 
-        /// <summary>输入变化回调（Bootstrap 经 onValueChanged 绑定）：置防抖脏标记。</summary>
+        /// <summary>输入变化回调（Bootstrap 经 onValueChanged 绑定）：同步评估并立即刷新建议。</summary>
         public void OnInputChanged()
         {
-            suggestionDirty = true;
-            suggestionEvalAt = Time.unscaledTime + SuggestionDebounceSeconds;
-        }
-
-        private void Update()
-        {
-            if (!suggestionDirty || Time.unscaledTime < suggestionEvalAt)
-            {
-                return;
-            }
-            suggestionDirty = false;
             EvaluateSuggestionNow();
         }
 
-        // 防抖到期后的实际评估：本地规则，零网络；异常兜底为"无建议"，绝不影响提交流程。
+        // 实际评估：本地规则，零网络；异常兜底为"无建议"，绝不影响提交流程。
         private void EvaluateSuggestionNow()
         {
             try

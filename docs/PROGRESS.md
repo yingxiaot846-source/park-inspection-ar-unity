@@ -333,3 +333,46 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 涉及文件：Assets/Scripts/LocalPriorityRules.cs（新）、SubmitPanel.cs、SubmitUIBootstrap.cs、docs/PROGRESS.md、AI_LOG.md。
 - Bonus 2 未完成项：装机/Play 验证建议刷新、采用、手动覆盖、防抖。
 - 下一步：commit → 等用户指令（装机验证或继续调整）。
+
+## [25] 2026-10-31 Bonus 2 增量修正与规则验证：三项偏差修正 + 14/14 规则测试真实执行 PASS（编译 PASS，未打 APK）
+
+**目标**：修正 [24] 实现的三项已确认偏差（标题先命中早返回 / 缺关键词 砸·急·漏水 / 多余 0.4s debounce），并用真实执行（非静态阅读）验证规则；不重做功能、不改 e12988e/e62b7ff 历史、不打 APK。
+
+**基线保护**：开工读 5 文件 + git 原始输出——status 空 / log -3 = e62b7ff, e12988e, 42dfda8 / `git show --stat e12988e` = AI_LOG.md +13、Assets/Scripts/LocalPriorityRules.cs +89（新）、SubmitPanel.cs +116、SubmitUIBootstrap.cs +15/−2、docs/PROGRESS.md +21；`git show --stat e62b7ff` = LocalPriorityRules.cs.meta +11；diff --check 空。未用 reset/amend/rebase/checkout/clean/restore。
+
+**修正（git diff --stat：2 files +17/−33，恰在允许范围内；SubmitUIBootstrap.cs 无需改——OnInputChanged 名字未变）**：
+- **偏差1 冲突处理**：`Scan(t) ?? Scan(d)` → 标题+描述逐级共同判断（high 任一命中即 high → 否则 medium 任一 → 否则 low；同级双命中先扫标题取原因词，只影响文案不改等级）；旧单文本 `Scan` 删除；类注释同步更新。
+- **偏差2 关键词**：HighKeywords += 砸、急（12 词）；MediumKeywords += 漏水（11 词）；grep 确认 漏水 不在 LowKeywords（10 词未动）；无其他增删。
+- **偏差3 去 debounce**：删 suggestionDirty/suggestionEvalAt/SuggestionDebounceSeconds 三字段 + `Update()`；`OnInputChanged` 直接同步调 `EvaluateSuggestionNow()`；grep "Debounce|suggestionDirty|unscaledTime" = 0 残留。
+
+**规则测试（实际执行 LocalPriorityRules.Evaluate）**：项目无测试框架（manifest.json grep test=0；Assets/Editor 仅 S4TestRunner/S5Build/S5MarkerAsset/S5Setup）。用 Unity 自带 Mono（`Editor\Data\MonoBleedingEdge`）mcs 直接编译**项目真实源文件** `Assets/Scripts/LocalPriorityRules.cs` + 沙箱 harness（mvp\ruletests\RuleTests.cs，项目目录外不入库）→ mcs EXIT=0 → mono 执行 RUN_EXIT=0。10 指定场景 + 4 关键词场景：
+
+| # | 输入（标题/描述） | 实际 priority | matched | reason 命中词 | 期望 | 结论 |
+|---|---|---|---|---|---|---|
+| T1 | 配电箱漏电 / 空 | high | True | 漏电 | high | PASS |
+| T2 | 空调异常噪音 / 空 | medium | True | 异常 | medium | PASS |
+| T3 | 墙面轻微划痕 / 空 | low | True | 划痕 | low | PASS |
+| T4 | 墙面划痕 / 发现配电箱漏电 | high | True | 漏电 | high | PASS |
+| T5 | 空调故障 / 建议优化外观 | medium | True | 故障 | medium | PASS |
+| T6 | 巡检记录 / 普通巡检记录 | "" | False | 未命中关键词 | matched=false | PASS |
+| T7 | "" / "" | "" | False | ""（不崩） | matched=false | PASS |
+| T8 | null / null | "" | False | ""（不崩） | matched=false | PASS |
+| T9 | 墙面轻微划痕 / 设备故障并有漏电危险 | high | True | 漏电 | high | PASS |
+| T10 | 照明设备异常 / 存在坠落危险 | high | True | 坠落 | high | PASS |
+| KA_ZA | 指示牌被砸坏 / 空 | high | True | 砸 | high | PASS |
+| KA_JI | 火情紧急 / 空 | high | True | 紧急 | high | PASS |
+| KA_LOUSHUI | 天花板漏水 / 空 | medium | True | 漏水 | medium | PASS |
+| KA_LOUSHUI_LOW | 轻微划痕 / 地面漏水 | medium | True | 漏水 | 漏水不在 low | PASS |
+
+→ **规则测试：PASS（14/14，真实执行项目源文件）**。
+
+| 验证 | 原始输出 | 结论 |
+|---|---|---|
+| 不变式（第三节） | PriorityValues 单定义（21）+3 使用，无第二套映射；SetPriority→manualLocked=true→ApplyPriority(41-45)；OnAdoptSuggestion→ApplyPriority 不置 manual(55-68)、非法/无匹配提前 return；提交 priority=PriorityValues[priorityIndex](199)；输入变化只写 lastSuggestion 不碰 priorityIndex | PASS |
+| Bonus 1 兼容性 | GetTouch(i)=152 / GetTouch(0) 仅注释 149 / PlaneWithinPolygon=194 / RaycastAll=176 / ApplyIssueStyle 118↔成功分支 231 / SetCurrentPriority 106↔141；PlaneTapPlacer/IssueApi/IssueModels/ApiConfig diff 空；BaseUrl 仍 192.168.5.29:8080 | PASS（静态证据） |
+| 编译 | Logs/bonus2b-import.log：errorCS=0；`313: CompileScripts: 1613.299ms`；quit=1；BUILD_RESULT=无（本轮仅编译未打包，属预期） | PASS |
+| git | diff --check EXIT=0 空；status 仅 2 文件 M；diff --name-only = LocalPriorityRules.cs + SubmitPanel.cs | PASS（范围符合） |
+
+- 涉及文件：Assets/Scripts/LocalPriorityRules.cs、SubmitPanel.cs、AI_LOG.md、docs/PROGRESS.md（仅追加更正记录，历史未覆盖）。
+- **当前结论：规则测试 PASS / 编译 PASS / 静态不变式+Bonus 1 兼容性 PASS / Play·真机 UNVERIFIED；本轮未打 APK。**
+- 下一步：commit（fix(bonus2) 增量修正）→ 等用户指令（装机验证建议刷新/采用/手动覆盖，或继续调整）。
