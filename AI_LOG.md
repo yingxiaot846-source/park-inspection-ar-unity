@@ -40,3 +40,13 @@
    - 状态：[LIVE] → 代码与编译完成；**真机/Play 模式颜色显示 UNVERIFIED（本轮未打 APK、未运行 Play 模式）**
    - commit：`bonus1-marker-color`
 
+### Bonus 1 复核修正（第二轮）
+
+- 状态：[LIVE]
+- 阶段：Bonus 1 复核修正
+- 发现：原实现只修改了 alpha，但 Marker.mat 为 Standard Opaque 模式（`_Mode: 0`/`_SrcBlend: 1`/`_DstBlend: 0`/`_ZWrite: 1`、`m_ValidKeywords: []`，本轮读取资产原文核实），半透明效果未被证明有效
+- 修正：为 marker 专属材质实例补充透明/不透明渲染状态切换——新增 `ApplyMarkerVisualStyle(Color, bool resolved)`（resolved=true：`_Mode=3`、`_SrcBlend=5(SrcAlpha)`、`_DstBlend=10(OneMinusSrcAlpha)`、`_ZWrite=0`、开 `_ALPHABLEND_ON`、关 `_ALPHATEST_ON`/`_ALPHAPREMULTIPLY_ON`、renderQueue=3000；false：恢复 `_Mode=0`/1/0/`_ZWrite=1`、关 `_ALPHABLEND_ON`、renderQueue=2000），只作用于 `markerMaterialInstance`，Marker.mat 资产零改动；`SetCurrentPriority`/`ApplyIssueStyle`/创建处统一收敛到 `RefreshMarkerStyle()`。另修：`HandleTap` 命中平面准备更新位置时重置 `currentStatus="open"`（保留 currentPriority），防旧 resolved 灰色污染新标记；提交失败分支未动。
+- 发现：旧记录中的"准备开始，尚未完成"与后续结束记录并列，已追加当前状态澄清（本条即澄清，历史原文未删）
+- 实际 commit：以本轮真实 commit hash 为准（见下一行 git 记录）
+- 真机颜色测试：仍标记 UNVERIFIED（本轮未运行 APK、未跑 Play 模式；编译 Logs/bonus1b-import.log error CS=0）
+

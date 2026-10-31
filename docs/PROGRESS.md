@@ -240,3 +240,25 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 
 - 仍未验证（UNVERIFIED）：Play 模式/真机上标记实际颜色显示——需人工运行；提交成功后 marker 变色、resolved 灰半透明的运行时效果未跑。
 - 下一步：Play 模式或装机人工验证颜色 → 通过后再打包。
+
+## [21] 2026-10-31 Bonus 1 复核修正：resolved 真半透明（渲染状态切换）+ 新标记状态重置（编译通过，未打 APK）
+
+**发现**：[20] 只改 alpha，但 Marker.mat 为 Standard Opaque（本轮读资产原文：`_Mode: 0`、`_SrcBlend: 1`、`_DstBlend: 0`、`_ZWrite: 1`、`m_ValidKeywords: []`、`m_CustomRenderQueue: -1`），Opaque 下 alpha 无效，半透明未被证明有效。另：单标记复用时旧 resolved 灰色会污染新上报的标记。
+**更正 [20] 记录**：其 E 栏写的 `commit bonus1-marker-color` 为提交 message，真实 hash 是 `fe46893`（以 git log 为准，此处按实更正，不改历史条目）。
+
+**Bonus 1 代码修正**（只改 1 个文件 Assets/Scripts/PlaneTapPlacer.cs；SubmitPanel.cs/Marker.mat 零改动）：
+- 新增材质样式唯一应用入口 `ApplyMarkerVisualStyle(Color color, bool resolved)`：resolved=true → `_Mode=3`、`_SrcBlend=5`(SrcAlpha)、`_DstBlend=10`(OneMinusSrcAlpha)、`_ZWrite=0`、Enable `_ALPHABLEND_ON`、Disable `_ALPHATEST_ON`/`_ALPHAPREMULTIPLY_ON`、renderQueue=3000(Transparent)、color=(0.5,0.5,0.5,0.35)；false → `_Mode=0`、1、0、`_ZWrite=1`、三 Keyword 全关、renderQueue=2000(Geometry)。只作用于 `markerMaterialInstance`。
+- 新增 `RefreshMarkerStyle()` 内部收敛；`SetCurrentPriority`/`ApplyIssueStyle`/marker 创建处三处调用统一走它（原直接 `.color=` 赋值已移除）。
+- 修复二：`HandleTap` 里真实命中平面、准备更新 marker 位置时重置 `currentStatus="open"`（保留 currentPriority），并打日志；marker 已存在分支重刷样式。**提交失败分支无任何重置/改色**（失败保留原标记行为不变）。
+- 保留项逐一核对：ColorForPriority/ColorForState/Input.touchCount/GetTouch(i)/RaycastAll/PlaneWithinPolygon/单标记复用/BaseUrl/三重拦截 全在（见下表）。
+
+| 验证 | 原始输出 | 结论 |
+|---|---|---|
+| 静态检查 | GetTouch(i)=152；GetTouch(0) 仅注释 149；PlaneWithinPolygon=194；RaycastAll=176；FakeX/Y/Z 无匹配；ColorForPriority=41/ColorForState=52/单标记复用 213-215；git diff ApiConfig 空且 BaseUrl 仍 `http://192.168.5.29:8080`；git status 仅 ` M Assets/Scripts/PlaneTapPlacer.cs`（React/Go/issues.json 不在列表） | PASS |
+| Marker.mat 未改 | git status 无该文件；资产仍 `_Mode: 0`...（未被改成动态颜色资产） | PASS |
+| 编译 | `Unity.exe -batchmode -quit -projectPath ... -logFile Logs/bonus1b-import.log`：`errorCS=0`；`CompileScripts: 1446.367ms` + quit 计数 1 | PASS |
+| 真机测试 | **未执行**（本轮不打 APK、不跑 Play 模式） | UNVERIFIED |
+
+- 涉及文件：Assets/Scripts/PlaneTapPlacer.cs（+~50 行）；docs/PROGRESS.md、AI_LOG.md（追加）。
+- **当前结论：PARTIAL**——代码/静态/编译通过；resolved 半透明与状态重置的运行时效果 UNVERIFIED。
+- 下一步：Play 模式或装机人工验证 → 通过后再打包；Bonus 2 未开始。

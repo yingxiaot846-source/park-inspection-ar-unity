@@ -58,26 +58,70 @@ namespace MvpArSubmitter
             return ColorForPriority(priority);
         }
 
+        /// <summary>
+        /// 材质样式唯一应用入口：颜色 + Standard Shader 透明/不透明渲染状态。
+        /// 只允许作用于 markerMaterialInstance（克隆实例），绝不改 Resources/Marker.mat 资产。
+        /// 仅改 alpha 在 Opaque 模式下无效，必须同步切 Blend/ZWrite/Keyword/renderQueue。
+        /// </summary>
+        private void ApplyMarkerVisualStyle(Color color, bool resolved)
+        {
+            if (markerMaterialInstance == null)
+            {
+                return;
+            }
+            markerMaterialInstance.color = color;
+            if (resolved)
+            {
+                // 透明模式：SrcAlpha / OneMinusSrcAlpha 混合，关 ZWrite，进透明队列。
+                markerMaterialInstance.SetFloat("_Mode", 3f);
+                markerMaterialInstance.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);      // 5
+                markerMaterialInstance.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha); // 10
+                markerMaterialInstance.SetInt("_ZWrite", 0);
+                markerMaterialInstance.EnableKeyword("_ALPHABLEND_ON");
+                markerMaterialInstance.DisableKeyword("_ALPHATEST_ON");
+                markerMaterialInstance.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                markerMaterialInstance.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent; // 3000
+            }
+            else
+            {
+                // 不透明模式：恢复 Marker.mat 默认（_Mode=0, Src=1, Dst=0, ZWrite=1, Geometry 2000）。
+                markerMaterialInstance.SetFloat("_Mode", 0f);
+                markerMaterialInstance.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);  // 1
+                markerMaterialInstance.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero); // 0
+                markerMaterialInstance.SetInt("_ZWrite", 1);
+                markerMaterialInstance.DisableKeyword("_ALPHABLEND_ON");
+                markerMaterialInstance.DisableKeyword("_ALPHATEST_ON");
+                markerMaterialInstance.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                markerMaterialInstance.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry; // 2000
+            }
+        }
+
+        /// <summary>按当前 currentPriority/currentStatus 刷新实例样式（内部统一走 ApplyMarkerVisualStyle）。</summary>
+        private void RefreshMarkerStyle()
+        {
+            ApplyMarkerVisualStyle(ColorForState(currentPriority, currentStatus), currentStatus == "resolved");
+        }
+
         /// <summary>记录当前选择的优先级，供随后放置的标记上色（由 SubmitPanel.SetPriority 调用）。</summary>
         public void SetCurrentPriority(string priority)
         {
             currentPriority = priority;
             if (marker != null && markerMaterialInstance != null)
             {
-                markerMaterialInstance.color = ColorForState(currentPriority, currentStatus);
+                RefreshMarkerStyle();
                 Debug.Log("[PlaneTapPlacer] 标记样式更新 priority=" + currentPriority +
                           " status=" + currentStatus);
             }
         }
 
-        /// <summary>提交成功后按后端返回的 priority/status 刷新标记颜色（由 SubmitPanel 调用）。</summary>
+        /// <summary>提交成功后按后端返回的 priority/status 刷新标记样式（由 SubmitPanel 调用）。</summary>
         public void ApplyIssueStyle(string priority, string status)
         {
             currentPriority = priority;
             currentStatus = status;
             if (markerMaterialInstance != null)
             {
-                markerMaterialInstance.color = ColorForState(currentPriority, currentStatus);
+                RefreshMarkerStyle();
                 Debug.Log("[PlaneTapPlacer] 标记样式更新 priority=" + currentPriority +
                           " status=" + currentStatus);
             }
@@ -158,6 +202,14 @@ namespace MvpArSubmitter
             Pose pose = hits[0].pose;
             Vector3 position = pose.position + Vector3.up * 0.04f; // 让方块"坐在"平面上，不半埋
 
+            // 新一轮上报：真实命中平面才重置状态为 open（保留用户当前选择的优先级），
+            // 防止旧问题的 resolved 灰色半透明样式污染新放置的标记；提交失败时不动。
+            if (currentStatus != "open")
+            {
+                currentStatus = "open";
+                Debug.Log("[PlaneTapPlacer] 命中新平面，样式状态重置为 open（priority 保持 " + currentPriority + "）");
+            }
+
             if (marker == null)
             {
                 marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -169,7 +221,7 @@ namespace MvpArSubmitter
                 {
                     // 只取共享材质做模板，克隆出标记专属实例再改色——共享资产颜色永不变。
                     markerMaterialInstance = new Material(markerMat);
-                    markerMaterialInstance.color = ColorForState(currentPriority, currentStatus);
+                    RefreshMarkerStyle();
                     renderer.sharedMaterial = markerMaterialInstance;
                     Debug.Log("[PlaneTapPlacer] 标记创建，样式 priority=" + currentPriority +
                               " status=" + currentStatus);
@@ -178,6 +230,11 @@ namespace MvpArSubmitter
                 {
                     Debug.LogError("[PlaneTapPlacer] Resources/Marker.mat 未找到");
                 }
+            }
+            else
+            {
+                // 标记已存在（单标记复用，位置即将更新）：按重置后的状态重新应用样式。
+                RefreshMarkerStyle();
             }
 
             marker.transform.position = position;
