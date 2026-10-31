@@ -64,3 +64,33 @@
 - 回归检查：GetTouch(i)=152 / GetTouch(0) 仅注释 149 / PlaneWithinPolygon=194 / RaycastAll=176 / marker==null 复用 213 / Fake 0 匹配 / ApiConfig git diff 空且 BaseUrl 未变 / React、Go、backend data 不在 git status → 全 PASS
 - 未修改任何源码（本轮零 Edit）；未开始 Bonus 2
 
+### Bonus 1 人工运行时验收归档（第四轮）
+
+- 状态：[LIVE] → 归档（纯文档轮）
+- 阶段：Bonus 1 人工运行时验收归档 + 台账一致性检查
+- 证据来源：**用户实际安装 APK 后的人工观察**（非 agent 执行；用户未提供截图/视频，本记录不含任何截图路径）
+- APK：`Builds/bonus1-runtime.apk`（第三轮构建产物，18,478,786 字节，源码 = f8d5466 含 e9ca53d 修正）
+- 本轮没有修改 Unity 源码；本轮没有重新打 APK；本轮没有开始 Bonus 2
+
+逐项验收结果（用户实际观察）：
+
+| 验收项 | 结论 |
+|---|---|
+| medium 实际显示黄色 | PASS |
+| high 实际显示红色 | PASS |
+| low 实际显示绿色 | PASS |
+| 重新点击平面后颜色正常 | PASS |
+| 提交成功后颜色正常 | PASS |
+| 提交失败后 marker 是否保留 | UNVERIFIED |
+| 提交失败后输入是否保留 | UNVERIFIED |
+| resolved 灰色半透明 | UNVERIFIED |
+
+最终判断：
+
+- Bonus 1 主路径运行时验证：**PASS**
+- Bonus 1 总体结论：**PARTIAL**
+- 未完成验证项：提交失败回归（marker/输入保留均未测试）、resolved 灰色半透明
+- 当前 Unity 没有自然触发 resolved 的业务入口（无 PATCH 调用，POST 默认 open）
+- 备注：「重新点击平面后颜色正常」仅为用户观察到的普通颜色重放结果，不构成 "resolved → 新平面 open 重置" 的验证
+- Bonus 2：未开始
+

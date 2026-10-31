@@ -290,3 +290,25 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 本轮修改文件：仅 docs/PROGRESS.md、AI_LOG.md（台账追加；**零源码改动**）。
 - **当前结论：PARTIAL**——构建 PASS（新 APK 含 e9ca53d 后代码）；运行时颜色/失败/全 resolved 效果 UNVERIFIED，等装机人工验证；Bonus 2 未开始。
 - 下一步：用户安装 Builds/bonus1-runtime.apk 按报告 A-D 步骤验证颜色并回报结果。
+
+## [23] 2026-10-31 Bonus 1 人工运行时验收归档（纯文档轮，零源码改动）
+
+1. **日期**：2026-10-31
+2. **目标**：归档 Bonus 1 最终人工运行时验收结果 + 台账一致性检查；不修改功能代码、不开始 Bonus 2。
+3. **证据来源**：用户实际安装 APK 后的**人工观察**（用户未提供截图/视频，本条不含任何截图路径，未伪造任何日志）。
+4. **APK 路径**：`Builds/bonus1-runtime.apk`（[22] 轮构建产物，18,478,786 字节，源码 f8d5466 含 e9ca53d 后代码；本轮未重新打包）。
+5. **medium/high/low 实际颜色**：medium = 黄色 PASS；high = 红色 PASS；low = 绿色 PASS。
+6. **重新点击平面后**：颜色正常 PASS（仅为用户观察到的普通颜色重放结果，**不构成** "resolved → 新平面 open 重置" 的验证）。
+7. **提交成功后**：颜色正常 PASS。
+8. **提交失败回归**：marker 是否保留 UNVERIFIED；输入是否保留 UNVERIFIED（用户未测试）。
+9. **resolved 灰色半透明**：UNVERIFIED（用户未测试；Unity 当前无自然触发 resolved 的业务入口——无 PATCH 调用、POST 默认 open）。
+10. 本轮未修改任何 Unity 源码（`git status` 空输出起始与结束一致，仅本文件与 AI_LOG.md 追加）。
+11. 本轮未重新打 APK。
+12. Bonus 2：未开始。
+13. **当前结论**：
+    - 主路径运行时验证：**PASS**；
+    - Bonus 1 总体：**PARTIAL**；
+    - 提交失败回归：**UNVERIFIED**；resolved 灰色半透明：**UNVERIFIED**；
+    - Bonus 2：未开始。
+
+**台账一致性检查**：[20]（代码实现，编译通过未打 APK）、[21]（resolved 渲染状态修正 + 状态重置）、[22]（新 APK 产出，当时运行时全 UNVERIFIED）与本条（用户人工验收归档）链条一致、结论递进无矛盾；[22] 的"等装机人工验证"由本条闭环。历史条目未覆盖、未删改。
