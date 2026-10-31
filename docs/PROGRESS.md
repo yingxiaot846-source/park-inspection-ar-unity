@@ -262,3 +262,31 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 涉及文件：Assets/Scripts/PlaneTapPlacer.cs（+~50 行）；docs/PROGRESS.md、AI_LOG.md（追加）。
 - **当前结论：PARTIAL**——代码/静态/编译通过；resolved 半透明与状态重置的运行时效果 UNVERIFIED。
 - 下一步：Play 模式或装机人工验证 → 通过后再打包；Bonus 2 未开始。
+
+## [22] 2026-10-31 Bonus 1 运行时验证轮：新 APK 产出（含 e9ca53d 后代码），装机/Play 验证 UNVERIFIED
+
+**目标**：验证 high/medium/low 运行时颜色、提交成功/失败行为、resolved 入口；不新增业务功能、不开始 Bonus 2。
+
+**第一步 基础确认**：完整读取 PlaneTapPlacer/SubmitPanel/IssueApi/IssueModels/Marker.mat/AI_LOG/PROGRESS；`git status --short --untracked-files=all` 空输出、`git log -5 --oneline`（f8d5466→e9ca53d→fe46893→b3c0ad8→e4a55dc）、`git diff --check` 空 → 无未提交源码修改，满足打包前置。
+
+**第二步 构建**（源码 = HEAD f8d5466，包含 e9ca53d 之后全部代码；构建后 `git log -1` 仍 f8d5466）：
+
+| 项 | 原始输出 | 结论 |
+|---|---|---|
+| 命令 | `D:\Unity job\2022.3.62f3c1\Editor\Unity.exe -batchmode -quit -projectPath ... -executeMethod S5Build.Build -logFile Logs/bonus1-runtime-build.log`（后台 + 90s 轮询 1 次命中） | — |
+| BUILD_RESULT | `BUILD_RESULT=Succeeded size=352820390 errors=0`（第 946 行） | PASS |
+| error CS | 计数 0 | PASS |
+| APK | `Builds/mvp-ar.apk` 18,478,786 字节（15:17 新生成，非旧包 18,474,394）；S5Build.cs 硬编码路径，按指令未为改名大范围改代码，构建后复制为 `Builds/bonus1-runtime.apk` 同大小 | PASS |
+| 退出证据 | 日志无 "Batchmode quit successfully" 行（S5Build 用 EditorApplication.Exit 直接退出，历来如此）；BUILD_RESULT 已写 + APK 落盘 + Unity.exe 进程已消失 | PASS（按构建类判据） |
+
+**第三步 high/medium/low 运行时颜色**：**UNVERIFIED**——本机无 adb（`where adb` 无输出）、无已连接 Android 设备；Play 模式需 GUI 编辑器与 AR 运行环境，agent headless 无法执行。未将任何静态检查写成运行时 PASS，未伪造截图/日志。装机验证步骤已写入交付报告交用户执行（A 默认黄 / B high 红+重放+提交 / C low 绿+重放+提交 / D medium 恢复黄）。
+
+**第四步 提交失败不破坏样式**：**UNVERIFIED**（需真机或 GUI Play 模式；安全起见未擅停本项目后端）。代码级静态确认：SubmitPanel.OnSubmitFinished 失败分支仅 `SetResult(result.errorMessage)`，不碰 marker、不清输入；IssueApi 失败路径均走 Fail() 返回可读消息。
+
+**第五步 resolved 测试入口**：grep 全工程 "PATCH" 0 匹配（Unity 从未调用 PATCH 状态接口）；Assets/Editor 仅 S4TestRunner/S5Build/S5MarkerAsset/S5Setup，无 resolved 注入入口；POST /api/issues 默认 open → **当前项目无自然触发 resolved 的入口**。未手工改 backend/data/issues.json、未伪造截图。静态代码路径 PASS（[21] 已证），resolved 真实运行时效果保持 **UNVERIFIED**。未在无运行时证据下加 SetOverrideTag。
+
+**第六步 回归检查**：GetTouch(i)=152 / GetTouch(0) 仅注释行 149 / PlaneWithinPolygon=194 / EventSystem.current.RaycastAll=176 / `marker == null` 单标记复用=213 / FakeX/Y/Z 0 匹配 / git diff ApiConfig 空且 BaseUrl 仍 `http://192.168.5.29:8080` / React、Go、backend/data 不在 git status → **全 PASS**；构建日志 error CS=0。
+
+- 本轮修改文件：仅 docs/PROGRESS.md、AI_LOG.md（台账追加；**零源码改动**）。
+- **当前结论：PARTIAL**——构建 PASS（新 APK 含 e9ca53d 后代码）；运行时颜色/失败/全 resolved 效果 UNVERIFIED，等装机人工验证；Bonus 2 未开始。
+- 下一步：用户安装 Builds/bonus1-runtime.apk 按报告 A-D 步骤验证颜色并回报结果。

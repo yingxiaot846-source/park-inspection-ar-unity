@@ -50,3 +50,17 @@
 - 实际 commit：`e9ca53d` fix(bonus1): resolved 真半透明（Standard 透明渲染状态切换）+ 命中新平面重置状态为 open（3 files，+93/−4）
 - 真机颜色测试：仍标记 UNVERIFIED（本轮未运行 APK、未跑 Play 模式；编译 Logs/bonus1b-import.log error CS=0）
 
+### Bonus 1 运行时验证轮（第三轮）
+
+- 状态：[LIVE]
+- 阶段：Bonus 1 运行时验证（不改业务代码、不开始 Bonus 2）
+- 本轮真实 commit 基线：HEAD = `f8d5466`（含 e9ca53d 全部修正；`git status --short --untracked-files=all` 空、`git diff --check` 空）
+- 重新打 APK：是。构建命令 `Unity.exe -batchmode -quit -executeMethod S5Build.Build -logFile Logs/bonus1-runtime-build.log`；`BUILD_RESULT=Succeeded size=352820390 errors=0`；日志 `error CS`=0；源码=HEAD f8d5466（构建后 git log -1 仍 f8d5466，确认包含 e9ca53d 后代码）
+- APK：脚本硬编码 `Builds/mvp-ar.apk`（18,478,786 字节，2026-10-31 15:17）；按指令未大范围改脚本，构建后复制为独立文件名 `Builds/bonus1-runtime.apk`（同大小 18,478,786 字节，15:23 复制）
+- high/medium/low 运行时测试：**UNVERIFIED**——本机无 adb（`where adb` 无输出）、无已连接手机，agent 环境无法装机；Play 模式需 GUI 编辑器 + AR 设备/模拟，headless 无法执行。未伪造任何运行结果。
+- 提交成功测试（运行时）：UNVERIFIED（同上，需装机人工执行）
+- 提交失败保样式测试：UNVERIFIED（需装机或 GUI Play 模式；代码级静态确认：SubmitPanel 失败分支只 SetResult，不动 marker/不清输入）
+- resolved 测试入口检查：**不存在自然触发入口**——全工程 grep "PATCH" 0 匹配（Unity 无 PATCH 调用）；Assets/Editor 仅 S4TestRunner/S5Build/S5MarkerAsset/S5Setup，均无 resolved 注入；POST 新建默认 open。未伪造截图、未手工改 issues.json。resolved 运行时效果保持 UNVERIFIED，静态代码路径 PASS（ColorForState/ApplyMarkerVisualStyle 见 [21]）
+- 回归检查：GetTouch(i)=152 / GetTouch(0) 仅注释 149 / PlaneWithinPolygon=194 / RaycastAll=176 / marker==null 复用 213 / Fake 0 匹配 / ApiConfig git diff 空且 BaseUrl 未变 / React、Go、backend data 不在 git status → 全 PASS
+- 未修改任何源码（本轮零 Edit）；未开始 Bonus 2
+
