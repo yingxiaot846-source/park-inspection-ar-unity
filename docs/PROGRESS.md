@@ -195,3 +195,28 @@ commit **4c1adfc** `feat(s5.2): 平面点选放置标记 + 三端坐标真实化
 - 涉及文件：Assets/Editor/S5MarkerAsset.cs（新）、PlaneTapPlacer.cs、SubmitUIBootstrap.cs、ARDebugHud.cs、Assets/Resources/Marker.mat（生成物）。
 - vite dev server 在后台运行（sandbox mvp/web，/api 代理 → 127.0.0.1:8080）；手机访问 admin 需 `--host`（vite 默认只绑 localhost，本轮未要求，未改）。
 - 下一步：commit → 用户装机验证（UI 点击 Logcat "[Tap] 拦截:UI 射线命中 N 个"；HUD 区不误放；Marker 材质缺失则 LogError；后端连通行 5s 刷新）。
+
+## [19] 2026-10-31 S5.5 + S5.5b：明文 HTTP 解禁 + SendWebRequest 防护；首编译 3 错误经用户规格修复后打包成功
+
+**根因（用户已确认，本轮未重新排查网络）**：ProjectSettings.asset 第 773 行 `insecureHttpOption: 0` = 播放器禁止 UnityWebRequest 访问 http://，手机浏览器可开 http://192.168.5.29:8080/api/health 而 App 内探测必失败即此故。
+
+S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setup.Apply 加 `PlayerSettings.insecureHttpOption = InsecureHttpOption.AlwaysAllowed;`（防重跑改回）；ARDebugHud 探测加 try/catch 异常上屏；IssueApi 两处裸 SendWebRequest 加 try/catch。未动场景/XR/Packages，未重跑 S5Setup.Apply。
+
+**S5.5 首编译 FAIL（error CS=9，去重 3 条），按纪律停下报告，两处根因均定位：**
+1. 我的失误：IssueApi 两处 Edit 的 old_string 都误含 `UnityWebRequest request = BuildCreateRequest(data);` 前缀（WaitBounded 参数即 request，无此行），两个 Edit 同时命中 SubmitRoutine 同一位置——WaitBounded 防护块（含 `return false`）被写进协程内（CS1622×2），WaitBounded 本身未改。
+2. 用户规格代码触碰 C# 语言限制：catch 子句内禁止 yield（ARDebugHud.cs CS1631）。
+
+**S5.5b 修复（一次一文件、整段替换、同文件禁并行）：**
+- ARDebugHud.cs：catch 内只置 `sendFailed=true`，`yield return wait; continue;` 移到 try/catch 外的 `if (sendFailed)` 块（grep 确认 yield return wait 在 60/68/95 行，均 catch 外）。
+- IssueApi.cs B-1：WaitBounded 整段替换（SendWebRequest 进 try/catch，异常与 op=null 均 `return false`——普通 bool 方法合法）；B-2：SubmitRoutine 误置块整段替换为 `sendFailed` 标志 + `Fail(0, "请求异常: …", null)` + `yield break`（协程内合法）；grep 确认 `return false` 仅在 WaitBounded 57/62/72/74 行。
+
+| 步骤 | 原始输出 | 结论 |
+|---|---|---|
+| S5.5 首编译（s55-import.log） | `errorCS=9`：IssueApi.cs(71,17)/(73,76) CS1622 ×2 + ARDebugHud.cs(55,21) CS1631（三程序集重复报） | FAIL→停，报告，用户发 S5.5b 规格 |
+| S5.5b 复编译（s55-import2.log 新名） | `errorCS=0`；`CompileScripts: 3629.512ms` + quit 计数 1 | PASS |
+| 打包（s5-build4.log 按用户指定名覆盖旧日志，60s 轮询 2 次命中） | `BUILD_RESULT=Succeeded size=352758842 errors=0`；errorCS_build=0；APK `18474394` 字节 | PASS |
+| insecureHttpOption 复核 | 第 773 行 `  insecureHttpOption: 2`（唯一 1 行） | PASS |
+
+- 涉及文件：ProjectSettings/ProjectSettings.asset（1 行）、Assets/Editor/S5Setup.cs（1 行）、Assets/Scripts/ARDebugHud.cs、Assets/Scripts/IssueApi.cs。
+- 仍未验证（需装机）：insecureHttpOption=2 后 HUD「后端连通」是否变「已连通 #N X.Xs」；探测异常上屏四态实际显示；提交硬超时 12s 路径。
+- 下一步：commit → 装机验证。

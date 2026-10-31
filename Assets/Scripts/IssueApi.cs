@@ -46,7 +46,21 @@ namespace MvpArSubmitter
         /// </summary>
         public static bool WaitBounded(UnityWebRequest request, int timeoutMs = 15000)
         {
-            UnityWebRequestAsyncOperation op = request.SendWebRequest();
+            UnityWebRequestAsyncOperation op = null;
+            try
+            {
+                op = request.SendWebRequest();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("[Api] WaitBounded 发送异常 " + e);
+                return false;
+            }
+            if (op == null)
+            {
+                Debug.LogError("[Api] WaitBounded op=null");
+                return false;
+            }
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
             while (!op.isDone && sw.ElapsedMilliseconds < timeoutMs)
             {
@@ -63,7 +77,27 @@ namespace MvpArSubmitter
         private static IEnumerator SubmitRoutine(CreateIssueRequest data, Action<SubmitResult> onComplete)
         {
             UnityWebRequest request = BuildCreateRequest(data);
-            UnityWebRequestAsyncOperation op = request.SendWebRequest();
+            UnityWebRequestAsyncOperation op = null;
+            bool sendFailed = false;
+            try { op = request.SendWebRequest(); }
+            catch (System.Exception e)
+            {
+                sendFailed = true;
+                Debug.LogError("[Api] Submit 发送异常 " + e);
+                request.Dispose();
+                if (onComplete != null) onComplete(Fail(0, "请求异常: " + e.GetType().Name + " " + e.Message, null));
+            }
+            if (sendFailed)
+            {
+                yield break;
+            }
+            if (op == null)
+            {
+                request.Dispose();
+                Debug.LogError("[Api] Submit op=null");
+                if (onComplete != null) onComplete(Fail(0, "请求异常: SendWebRequest 返回 null", null));
+                yield break;
+            }
             // 不用 yield return op：部分安卓设备/Unity 版本下该回调可能永不到达。
             // 改为手写硬超时轮询，超时主动 Abort，宁可报「无法连接后端」也不能永久卡住。
             float deadline = Time.realtimeSinceStartup + 12f;

@@ -39,9 +39,35 @@ namespace MvpArSubmitter
                 round++;
                 string url = backend + "/api/health";
                 backendState = "探测#" + round + " 中…";
-                UnityWebRequest req = UnityWebRequest.Get(url);
-                req.timeout = 3;
-                UnityWebRequestAsyncOperation op = req.SendWebRequest();
+                UnityWebRequest req = null;
+                UnityWebRequestAsyncOperation op = null;
+                bool sendFailed = false;
+                try
+                {
+                    req = UnityWebRequest.Get(url);
+                    req.timeout = 3;
+                    op = req.SendWebRequest();
+                }
+                catch (System.Exception e)
+                {
+                    sendFailed = true;
+                    backendState = "异常#" + round + " " + e.GetType().Name + ": " + e.Message;
+                    Debug.LogError("[Hud] 探测#" + round + " 抛异常 " + e);
+                    if (req != null) req.Dispose();
+                }
+                if (sendFailed)
+                {
+                    yield return wait;
+                    continue;
+                }
+                if (op == null)
+                {
+                    backendState = "异常#" + round + " SendWebRequest 返回 null";
+                    Debug.LogError("[Hud] 探测#" + round + " op=null url=" + url);
+                    req.Dispose();
+                    yield return wait;
+                    continue;
+                }
                 float t0 = Time.realtimeSinceStartup;
                 while (!op.isDone && Time.realtimeSinceStartup - t0 < ProbeTimeout)
                 {

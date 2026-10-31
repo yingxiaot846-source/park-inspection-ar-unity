@@ -28,6 +28,7 @@ public static class S5Setup
             GraphicsDeviceType.OpenGLES3,
         });
         PlayerSettings.Android.forceInternetPermission = true;
+        PlayerSettings.insecureHttpOption = InsecureHttpOption.AlwaysAllowed;
         Debug.Log("[S5Setup] 玩家设置完成");
 
         Object[] settingsAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset");
