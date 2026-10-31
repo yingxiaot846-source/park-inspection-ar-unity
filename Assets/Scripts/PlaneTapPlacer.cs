@@ -22,6 +22,67 @@ namespace MvpArSubmitter
         /// <summary>最近一次点击的结果，供 ARDebugHud 显示："放置"/"UI拦截"/"未命中"。</summary>
         public string LastTapInfo = "无";
 
+        // —— 加分项 1：标记颜色按优先级/状态切换 ——
+        // 颜色规则（固定）：high=红 medium=黄 low=绿；status=resolved → 灰色半透明（优先于优先级）。
+        private static readonly Color PriorityHighColor = Color.red;
+        private static readonly Color PriorityMediumColor = Color.yellow;
+        private static readonly Color PriorityLowColor = Color.green;
+        // 已解决：灰色 + 降低透明度。
+        private static readonly Color ResolvedColor = new Color(0.5f, 0.5f, 0.5f, 0.35f);
+
+        // 当前样式状态：新放置的标记按此上色；null/空/未知一律回退黄色，不抛异常。
+        private string currentPriority = "medium";
+        private string currentStatus = "open";
+
+        // 标记专属材质实例：绝不改 Resources/Marker.mat 共享资产。
+        private Material markerMaterialInstance;
+
+        /// <summary>优先级 → 颜色（high红/medium黄/low绿/未知黄）。</summary>
+        public static Color ColorForPriority(string priority)
+        {
+            switch (priority)
+            {
+                case "high": return PriorityHighColor;
+                case "low": return PriorityLowColor;
+                default: return PriorityMediumColor; // medium、null、空、未知 → 黄
+            }
+        }
+
+        /// <summary>颜色决策唯一入口：resolved 灰色半透明优先，否则按优先级。</summary>
+        public static Color ColorForState(string priority, string status)
+        {
+            if (status == "resolved")
+            {
+                return ResolvedColor;
+            }
+            return ColorForPriority(priority);
+        }
+
+        /// <summary>记录当前选择的优先级，供随后放置的标记上色（由 SubmitPanel.SetPriority 调用）。</summary>
+        public void SetCurrentPriority(string priority)
+        {
+            currentPriority = priority;
+            if (marker != null && markerMaterialInstance != null)
+            {
+                markerMaterialInstance.color = ColorForState(currentPriority, currentStatus);
+                Debug.Log("[PlaneTapPlacer] 标记样式更新 priority=" + currentPriority +
+                          " status=" + currentStatus);
+            }
+        }
+
+        /// <summary>提交成功后按后端返回的 priority/status 刷新标记颜色（由 SubmitPanel 调用）。</summary>
+        public void ApplyIssueStyle(string priority, string status)
+        {
+            currentPriority = priority;
+            currentStatus = status;
+            if (markerMaterialInstance != null)
+            {
+                markerMaterialInstance.color = ColorForState(currentPriority, currentStatus);
+                Debug.Log("[PlaneTapPlacer] 标记样式更新 priority=" + currentPriority +
+                          " status=" + currentStatus);
+            }
+        }
+
         private ARRaycastManager raycastManager;
         private GameObject marker;
 
@@ -106,7 +167,12 @@ namespace MvpArSubmitter
                 Material markerMat = Resources.Load<Material>("Marker");
                 if (markerMat != null)
                 {
-                    renderer.sharedMaterial = markerMat;
+                    // 只取共享材质做模板，克隆出标记专属实例再改色——共享资产颜色永不变。
+                    markerMaterialInstance = new Material(markerMat);
+                    markerMaterialInstance.color = ColorForState(currentPriority, currentStatus);
+                    renderer.sharedMaterial = markerMaterialInstance;
+                    Debug.Log("[PlaneTapPlacer] 标记创建，样式 priority=" + currentPriority +
+                              " status=" + currentStatus);
                 }
                 else
                 {

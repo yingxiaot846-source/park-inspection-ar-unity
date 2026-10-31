@@ -220,3 +220,23 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 涉及文件：ProjectSettings/ProjectSettings.asset（1 行）、Assets/Editor/S5Setup.cs（1 行）、Assets/Scripts/ARDebugHud.cs、Assets/Scripts/IssueApi.cs。
 - 仍未验证（需装机）：insecureHttpOption=2 后 HUD「后端连通」是否变「已连通 #N X.Xs」；探测异常上屏四态实际显示；提交硬超时 12s 路径。
 - 下一步：commit → 装机验证。
+
+## [20] 2026-10-31 加分项 1：AR 标记按优先级/状态变色（编译通过，未打 APK）
+
+回滚点 commit **b3c0ad8**（chore(s6.1): 管理端验收截图（回滚点 bonus1-before-marker-color））。
+改动只涉 2 文件（+79/−1）：PlaneTapPlacer.cs、SubmitPanel.cs；未动 IssueModels/ApiConfig/React/Go/backend/data/issues.json；**本轮不打 APK**。
+
+- PlaneTapPlacer.cs：新增唯一颜色决策入口 `ColorForState(priority, status)`（内部委托 `ColorForPriority`）——status=="resolved" → 灰半透明 new Color(0.5,0.5,0.5,0.35) 优先；否则 high=Color.red / low=Color.green / default（medium/null/空/未知）=Color.yellow，switch default 兜底不抛异常。新增公开方法 `SetCurrentPriority`（放置前记录所选优先级并即时刷新已有标记）与 `ApplyIssueStyle(priority,status)`（提交成功后按后端返回值刷新）。marker 创建时 `new Material(Resources.Load<Material>("Marker"))` 克隆专属实例再改色——共享资产颜色永不变；Resources.Load 加载与 LogError 兜底保留。
+- SubmitPanel.cs：`SetPriority` 里同步 `placer.SetCurrentPriority(PriorityValues[index])`；`OnSubmitFinished` 成功分支末尾 `placer.ApplyIssueStyle(result.issue.priority, result.issue.status)`；失败分支不动标记（原有回滚行为不变）。
+- 跨类依赖方案：采用用户允许的最小方案「SubmitPanel 成功后调用 placer 公开方法 ApplyIssueStyle」，无硬塞依赖、无新增外部依赖。
+
+| 验证 | 原始输出 | 结论 |
+|---|---|---|
+| A 静态保留（8 项） | Input.touchCount(102,106) / GetTouch(i)(108) / PlaneWithinPolygon(150) / EventSystem.current.RaycastAll(132) / Resources.Load("Marker")(167) 全在；GetTouch(0) 仅注释行 105；FakeX/Y/Z 0 匹配；git diff ApiConfig 为空 + BaseUrl 仍 `http://192.168.5.29:8080` | PASS |
+| B 颜色规则 | 代码级证据（方法全文）：high→Color.red / low→Color.green / default 含 medium/null/空/未知→Color.yellow；resolved→new Color(0.5,0.5,0.5,0.35) 且判定优先于优先级 | PASS（代码级） |
+| C 编译 | `Unity.exe -batchmode -quit -logFile Logs/bonus1-import.log`：`errorCS=0`；`CompileScripts: 9629.006ms` + quit 计数 1 | PASS |
+| D 回归 | CreatePrimitive 仅 1 处 + `if (marker == null)` 复用(161/163)；拦截 a/c 与 uiHits.Count>0(126/133/141)；提交拦截文案/interactable=false/失败保留输入全在；git diff --stat 仅 2 文件，React/Go/数据文件零改动 | PASS |
+| E git | diff --check 空输出（无空白错误）；commit `bonus1-marker-color` | PASS |
+
+- 仍未验证（UNVERIFIED）：Play 模式/真机上标记实际颜色显示——需人工运行；提交成功后 marker 变色、resolved 灰半透明的运行时效果未跑。
+- 下一步：Play 模式或装机人工验证颜色 → 通过后再打包。

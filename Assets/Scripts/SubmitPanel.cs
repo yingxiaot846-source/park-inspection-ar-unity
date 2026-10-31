@@ -36,6 +36,12 @@ namespace MvpArSubmitter
                 return;
             }
             priorityIndex = index;
+            // 同步给放置器：随后放置的标记按当前选中优先级上色。
+            var placerForColor = PlaneTapPlacer.Instance;
+            if (placerForColor != null)
+            {
+                placerForColor.SetCurrentPriority(PriorityValues[index]);
+            }
             if (priorityButtons == null)
             {
                 return;
@@ -120,6 +126,12 @@ namespace MvpArSubmitter
                           " createdAt=" + result.issue.createdAt +
                           " position=(" + Round3(lastSubmittedPos.x) + ", " +
                           Round3(lastSubmittedPos.y) + ", " + Round3(lastSubmittedPos.z) + ")");
+                // 加分项 1：提交成功才按后端返回的 priority/status 刷新标记颜色；失败不动标记。
+                var placerForStyle = PlaneTapPlacer.Instance;
+                if (placerForStyle != null)
+                {
+                    placerForStyle.ApplyIssueStyle(result.issue.priority, result.issue.status);
+                }
             }
             else
             {
