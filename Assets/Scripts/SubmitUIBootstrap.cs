@@ -84,12 +84,20 @@ namespace MvpArSubmitter
                 priorityButtons[i] = button;
             }
             panel.priorityButtons = priorityButtons;
-            panel.SetPriority(1);
+            panel.SetPriorityInitial(1);
 
             // 放置引导提示（原"本阶段为假坐标"标注位置）。
             hintText = CreateText(canvasGo.transform, "PlacementHint", "请点击地面放置标记", font, 18, TextAnchor.MiddleLeft);
             hintText.color = new Color(0.6f, 0.9f, 0.6f, 1f);
             Place(hintText.rectTransform, new Vector2(420f, 478f), new Vector2(560f, 28f));
+
+            // Bonus 2：本地规则智能判级——建议等级 + 原因（只展示，"采用"才生效）。
+            Text suggestionText = CreateText(canvasGo.transform, "SuggestionText", "输入标题或描述后给出建议", font, 18, TextAnchor.MiddleLeft);
+            suggestionText.color = new Color(0.95f, 0.85f, 0.55f, 1f);
+            Place(suggestionText.rectTransform, new Vector2(420f, 450f), new Vector2(560f, 28f));
+            Button adoptButton = CreateButton(canvasGo.transform, "AdoptSuggestionButton", "采用", font);
+            Place(adoptButton.GetComponent<RectTransform>(), new Vector2(1010f, 450f), new Vector2(120f, 28f));
+            adoptButton.interactable = false; // 无建议时禁用，由 SubmitPanel 按评估结果开关。
 
             // 提交按钮。
             Button submitButton = CreateButton(canvasGo.transform, "SubmitButton", "提交", font);
@@ -111,7 +119,12 @@ namespace MvpArSubmitter
             panel.descInput = descInput;
             panel.submitButton = submitButton;
             panel.resultText = resultText;
+            panel.suggestionText = suggestionText;
+            panel.adoptButton = adoptButton;
             submitButton.onClick.AddListener(panel.OnClickSubmit);
+            adoptButton.onClick.AddListener(panel.OnAdoptSuggestion);
+            titleInput.onValueChanged.AddListener(v => panel.OnInputChanged());
+            descInput.onValueChanged.AddListener(v => panel.OnInputChanged());
 
             // 点击放置器：手指点平面放标记。
             GameObject placerGo = new GameObject("PlaneTapPlacer");

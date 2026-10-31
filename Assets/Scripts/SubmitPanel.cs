@@ -28,8 +28,122 @@ namespace MvpArSubmitter
         private static readonly Color PriorityNormalColor = new Color(0.2f, 0.45f, 0.8f, 1f);
         private static readonly Color PrioritySelectedColor = new Color(0.15f, 0.7f, 0.35f, 1f);
 
-        /// <summary>由 UI 按钮调用：设置优先级并刷新三个按钮的高亮。</summary>
+        // —— Bonus 2：本地规则智能判级 ——（建议只展示，采用才生效；提交仍走 priorityIndex）
+
+        public Text suggestionText;
+        public Button adoptButton;
+
+        // 最近一次本地规则评估结果与"手动锁定"标记：手动点过低/中/高后停止自动刷新建议。
+        private PrioritySuggestion lastSuggestion;
+        private bool manualLocked;
+
+        // 建议防抖：输入停止 0.4 秒后评估一次，避免逐字符跑规则。
+        private bool suggestionDirty;
+        private float suggestionEvalAt;
+        private const float SuggestionDebounceSeconds = 0.4f;
+
+        /// <summary>由 低/中/高 按钮调用：视为手动选择，停止自动建议刷新。</summary>
         public void SetPriority(int index)
+        {
+            manualLocked = true;
+            ApplyPriority(index);
+            RefreshSuggestionDisplay();
+        }
+
+        /// <summary>初始化默认值用：不高亮为手动锁定（Bootstrap 启动时调用）。</summary>
+        public void SetPriorityInitial(int index)
+        {
+            ApplyPriority(index);
+        }
+
+        /// <summary>由"采用建议"按钮调用：采用当前建议等级（不视为手动锁定）。</summary>
+        public void OnAdoptSuggestion()
+        {
+            if (lastSuggestion == null || !lastSuggestion.matched)
+            {
+                return;
+            }
+            int index = System.Array.IndexOf(PriorityValues, lastSuggestion.priority);
+            if (index < 0)
+            {
+                return;
+            }
+            ApplyPriority(index);
+            RefreshSuggestionDisplay();
+        }
+
+        /// <summary>输入变化回调（Bootstrap 经 onValueChanged 绑定）：置防抖脏标记。</summary>
+        public void OnInputChanged()
+        {
+            suggestionDirty = true;
+            suggestionEvalAt = Time.unscaledTime + SuggestionDebounceSeconds;
+        }
+
+        private void Update()
+        {
+            if (!suggestionDirty || Time.unscaledTime < suggestionEvalAt)
+            {
+                return;
+            }
+            suggestionDirty = false;
+            EvaluateSuggestionNow();
+        }
+
+        // 防抖到期后的实际评估：本地规则，零网络；异常兜底为"无建议"，绝不影响提交流程。
+        private void EvaluateSuggestionNow()
+        {
+            try
+            {
+                lastSuggestion = LocalPriorityRules.Evaluate(titleInput.text, descInput.text);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("[SubmitPanel] 本地判级异常（已回退为无建议）: " + e);
+                lastSuggestion = new PrioritySuggestion { matched = false, priority = "", reason = "" };
+            }
+            RefreshSuggestionDisplay();
+        }
+
+        private static string LabelOf(string priority)
+        {
+            switch (priority)
+            {
+                case "high": return "高";
+                case "low": return "低";
+                default: return "中";
+            }
+        }
+
+        // 刷新建议展示：无建议/空输入显示引导文案并禁用"采用"按钮；不改动 priorityIndex。
+        private void RefreshSuggestionDisplay()
+        {
+            if (suggestionText == null)
+            {
+                return;
+            }
+            bool titleEmpty = titleInput == null || string.IsNullOrWhiteSpace(titleInput.text);
+            bool descEmpty = descInput == null || string.IsNullOrWhiteSpace(descInput.text);
+            if (lastSuggestion == null || !lastSuggestion.matched)
+            {
+                suggestionText.text = (titleEmpty && descEmpty)
+                    ? "输入标题或描述后给出建议"
+                    : "暂无自动建议，请手动选择";
+                if (adoptButton != null)
+                {
+                    adoptButton.interactable = false;
+                }
+                return;
+            }
+            string prefix = manualLocked ? "已手动选择｜建议" : "建议";
+            suggestionText.text = prefix + ":" + LabelOf(lastSuggestion.priority) + " | " + lastSuggestion.reason;
+            if (adoptButton != null)
+            {
+                adoptButton.interactable = true;
+            }
+        }
+
+        /// <summary>设置优先级并刷新三个按钮的高亮（手动/初始化/采用共用的实际生效路径）。</summary>
+        private void ApplyPriority(int index)
         {
             if (index < 0 || index >= PriorityValues.Length)
             {

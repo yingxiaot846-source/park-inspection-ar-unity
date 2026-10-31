@@ -312,3 +312,24 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
     - Bonus 2：未开始。
 
 **台账一致性检查**：[20]（代码实现，编译通过未打 APK）、[21]（resolved 渲染状态修正 + 状态重置）、[22]（新 APK 产出，当时运行时全 UNVERIFIED）与本条（用户人工验收归档）链条一致、结论递进无矛盾；[22] 的"等装机人工验证"由本条闭环。历史条目未覆盖、未删改。
+
+## [24] 2026-10-31 Bonus 2 实现轮：本地规则智能判级（编译通过，未打 APK）
+
+**目标**：按已评审设计实现"轻量本地规则智能判级"——本地关键词规则给出可解释建议、用户可采用/可手动覆盖；不加网络、不改契约、不动 Bonus 1 逻辑。开工检查：`git status` 空、HEAD=42dfda8、`git diff --check` 空。
+
+**改动（3 文件，PlaneTapPlacer/IssueApi/IssueModels/ApiConfig/React/Go 零改动）**：
+- **新建 `Assets/Scripts/LocalPriorityRules.cs`**（纯 C# 静态类，零 Unity/网络依赖）：`PrioritySuggestion {priority, reason, matched}` + `Evaluate(title, description)`。词表：high={漏电,火灾,燃气,触电,坍塌,坠落,人身,危险,紧急,重大} / medium={故障,异常,损坏,渗水,噪音,失灵,停用,卡住,影响使用,无法} / low={划痕,轻微,建议,优化,观感,灰尘,清洁,摆放,标识不清,美化}。冲突策略：先标题后描述；同文本 high>medium>low 命中即返回（不计分）；归一化 Trim+ToLowerInvariant（中文子串匹配）；双空返回 matched=false；全程 try/catch 异常回退 matched=false。命中原因含命中词（可解释）。
+- **SubmitPanel.cs**（+116 行）：新增 `suggestionText`/`adoptButton` 字段；`SetPriority` 拆分手动锁定语义（手动点按钮 → `manualLocked=true`）+ 共用 `ApplyPriority`（内含原颜色联动 SetCurrentPriority，Bonus 1 路径不变）；`SetPriorityInitial`（启动默认中，不锁定）；`OnAdoptSuggestion`（Array.IndexOf→ApplyPriority，越界安全）；输入变化 `OnInputChanged` 置脏 + `Update` 内 0.4s 防抖评估；`EvaluateSuggestionNow` try/catch 兜底；`RefreshSuggestionDisplay` 显示"建议:高|原因…"或引导文案并开关 adopt 按钮；手动锁定后前缀"已手动选择｜建议"。**提交路径未动**：仍 `PriorityValues[priorityIndex]`；成功分支 ApplyIssueStyle 未动；失败分支保留输入未动。
+- **SubmitUIBootstrap.cs**（+15/−2）：新增 `SuggestionText`（420,450，560×28，淡黄）+ `AdoptSuggestionButton`"采用"（1010,450，120×28，初始 interactable=false）；两 InputField onValueChanged → `panel.OnInputChanged()`；启动改调 `SetPriorityInitial(1)`。新控件在 Canvas/GraphicRaycaster 下 → 自动被 RaycastAll 拦截，AR 点击不受影响。
+
+| 验证 | 原始输出 | 结论 |
+|---|---|---|
+| 静态回归 10 项 | GetTouch(i)=152 / GetTouch(0) 仅注释 149 / PlaneWithinPolygon=194 / RaycastAll=176 / ApplyIssueStyle=247 仍在成功分支 / Fake 0 匹配 / BaseUrl 未变 / 按钮仍绑 SetPriority(Bootstrap 83) / PriorityValues 仍 low,medium,high / diff --stat 仅 SubmitPanel+SubmitUIBootstrap（LocalPriorityRules 为新文件 ??） | PASS |
+| Bonus 1 保护 | PlaneTapPlacer.cs 不在 git status（零改动）；SetCurrentPriority 调用链不变；提交成功 ApplyIssueStyle 不变 | PASS |
+| 契约保护 | IssueModels/IssueApi/ApiConfig 零改动；无新网络调用；priority 枚举未变 | PASS |
+| 编译 | `Unity.exe -batchmode -quit -logFile Logs/bonus2-import.log`：`errorCS=0`；`328: CompileScripts: 4399.496ms` + quit 计数 1 | PASS |
+
+- **本轮结论：代码/静态/编译 PASS；运行时建议效果 UNVERIFIED（未打 APK、未跑 Play 模式）**。
+- 涉及文件：Assets/Scripts/LocalPriorityRules.cs（新）、SubmitPanel.cs、SubmitUIBootstrap.cs、docs/PROGRESS.md、AI_LOG.md。
+- Bonus 2 未完成项：装机/Play 验证建议刷新、采用、手动覆盖、防抖。
+- 下一步：commit → 等用户指令（装机验证或继续调整）。

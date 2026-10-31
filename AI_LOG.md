@@ -94,3 +94,16 @@
 - 备注：「重新点击平面后颜色正常」仅为用户观察到的普通颜色重放结果，不构成 "resolved → 新平面 open 重置" 的验证
 - Bonus 2：未开始
 
+### Bonus 2 实现轮（第五轮）
+
+- 状态：[LIVE]
+- 阶段：Bonus 2 轻量本地规则智能判级——实现（依据已评审设计方案；不改契约、不动 Bonus 1 核心逻辑）
+- 基线：HEAD = `42dfda8`；开工检查 git status 空、git log -5 正常、git diff --check 空
+- 实现内容（3 文件）：
+  - 新建 `LocalPriorityRules.cs`（纯 C# 静态规则类，零网络、零外部 AI）：high（漏电/火灾/燃气/触电/坍塌等）> medium（故障/异常/损坏/渗水等）> low（划痕/轻微/建议/优化等）；先标题后描述；命中即返回并附命中词原因（可解释）；双空/未命中/异常一律 matched=false（可回退）
+  - `SubmitPanel.cs`：`SetPriority`（手动锁定）/ `SetPriorityInitial`（启动默认）/ `OnAdoptSuggestion`（采用建议）三入口收敛到共用 `ApplyPriority`（内含 Bonus 1 原颜色联动 SetCurrentPriority）；输入变化经 `OnInputChanged` + `Update` 0.4s 防抖评估；建议只展示不自动覆盖；提交仍走 `PriorityValues[priorityIndex]`，提交/成功/失败路径零改动
+  - `SubmitUIBootstrap.cs`：新增建议文本（淡黄）+ "采用"按钮（初始 interactable=false）；两 InputField onValueChanged 接入防抖；启动改调 `SetPriorityInitial(1)`；新控件在 Canvas 下自动被 RaycastAll 拦截，AR 点击不受影响
+- 验证：静态回归 10 项 PASS（GetTouch(i)=152 / GetTouch(0) 仅注释 / PlaneWithinPolygon=194 / RaycastAll=176 / ApplyIssueStyle 仍在成功分支 / Fake 0 匹配 / BaseUrl 未变 / PlaneTapPlacer 零改动）；编译 `Logs/bonus2-import.log` → errorCS=0、CompileScripts 4399.496ms、Batchmode quit successfully 1 → PASS
+- 本轮未打 APK；运行时效果（建议刷新/采用生效/手动覆盖/防抖）UNVERIFIED，待装机或 Play 模式验证
+- 本轮 commit：见 git 记录（feat(bonus2) 开头）
+
