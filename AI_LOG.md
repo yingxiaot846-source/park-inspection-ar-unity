@@ -161,3 +161,23 @@ git：`git diff --check` 空 EXIT=0；`git status` 仅 ` M LocalPriorityRules.cs
 - **本轮结论：词表修正 PASS；规则测试 18/18 PASS（真实执行）；编译 PASS；打包 PASS（APK 产出）；Play/真机 UNVERIFIED（由用户人工验收，agent 不代填结果）。**
 - 涉及文件：Assets/Scripts/LocalPriorityRules.cs、AI_LOG.md、docs/PROGRESS.md（台账追加）。
 
+### [FIX-1] 提交提示不可见 + 标记颜色黑 修复（第八轮）
+
+- 状态：[LIVE]
+- 阶段：[FIX-1] 先取证 → 按证据选分支 → 只改命中分支 → 自检上屏 → 打包一次
+- 回滚点：HEAD `5fbf2c65faf89e258075eff3fc93d27a8e8900bf`（开工 status 空）；未执行 reset/amend/rebase/checkout/clean/restore
+- 取证结论：resultText 为 legacy Text，Place(100,340,880,40) 中心锚点 left=−340 越出屏幕左缘（提示不可见根因）；`renderer.material = markerMaterialInstance` **不存在**（仅 225 行 `renderer.sharedMaterial = markerMaterialInstance`，赋值对象即实例、渲染等价）；父链无 LayoutGroup；绑定非 null；alpha=1、active
+- 分支判定：**A 命中**（越界）；B/C/D/E 未命中（E 按用户判据逐字核对：字面句不存在，但等价赋值已在 225 行 → 不补赋值；黑标根因静态未定位，Bonus 1 期真机曾验证颜色正常，靠本轮诊断行+兜底排查）
+- 三处冲突与裁定：
+  1. 必做2 finally 直接恢复 interactable → 会解锁飞行期防重锁；裁定方案甲：`dispatched` 标志，仅异常/未派发时恢复
+  2. 分支A `hintText+(0,−35)` 与建议行 (420,450) 重叠；裁定 `Place((420,343),(700,40))`
+  3. S5Build 硬编码 mvp-ar.apk 与「禁止覆盖」冲突；裁定构建后复制 fix1-runtime.apk 并如实声明覆盖
+  附加：诊断增加 Shader/实例两行；echoText 动态文本不含「假坐标」→ 跳过清理（该词仅在注释 16/89 行）
+- 改动（4 个 Assets/Scripts .cs，一次一文件）：SubmitUIBootstrap 106-113（Place+Wrap+Overflow+transform.SetAsLastSibling）；SubmitPanel OnClickSubmit 167-231 / OnSubmitFinished 233-269（try/catch/finally + dispatched，无空 catch）/ SetResult 271-279（双通道 LastResult）；PlaneTapPlacer 诊断字段 41-46、RefreshMarkerStyle 108-114、ApplyAntiBlackFallback 117-163、RefreshDiagnostics 166-191、创建块 314、拦截 274（−200→−350）；ARDebugHud LastResult 19、resultRectLine 22、ResultRectCheck 35/40-64、Box 330 于 155、追加行 164-179
+- 编译：首编译 Logs/fix1-import.log **FAIL**——`error CS1061` ×3（SubmitUIBootstrap.cs(113,24) SetAsLastSibling 非 Text 方法；我的失误，按纪律停止贴原文，用户批准单行修复）→ 重编译 fix1-import2.log：errorCS=0、`312: CompileScripts: 3101.612ms`、quit=1 → **PASS**
+- S2（台账写入前采集）：diff --name-only 恰为 4 个 Assets/Scripts .cs；无 .mat/.shader/.unity/ProjectSettings/后端/前端；diff --check 空 → PASS
+- 打包：`BUILD_RESULT=Succeeded size=353054985 errors=0`（Logs/fix1-build.log errorCS=0）；mvp-ar.apk 18,485,858 字节（**被本次构建覆盖**，等价旧产物=bonus2-runtime.apk）→ 复制 `Builds/fix1-runtime.apk` 18,485,858 字节；bonus1/bonus2 未动
+- 结果行矩形：设计值 x∈[70,770]、y∈[323,363] 在屏内；**真机实测 L/R/T/B/判定 UNVERIFIED**
+- 诊断各行实测值（材质/颜色/渲染/Shader/实例/兜底）：**UNVERIFIED**（未运行 Play/装机）
+- 本轮 commit：见 git 记录（fix(fix1) 开头）
+

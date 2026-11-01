@@ -104,8 +104,13 @@ namespace MvpArSubmitter
             Place(submitButton.GetComponent<RectTransform>(), new Vector2(420f, 410f), new Vector2(180f, 52f));
 
             // 结果提示。
+            // FIX-1 分支A：原 Place(100,340,880,40) 中心锚点下 left=100-440=-340 越出屏幕左缘，
+            // MiddleLeft 文字从屏外起排 → 提交提示不可见。改 Place(420,343,700,40)，设计坐标 x∈[70,770]、y∈[323,363]。
             Text resultText = CreateText(canvasGo.transform, "ResultText", string.Empty, font, 24, TextAnchor.MiddleLeft);
-            Place(resultText.rectTransform, new Vector2(100f, 340f), new Vector2(880f, 40f));
+            Place(resultText.rectTransform, new Vector2(420f, 343f), new Vector2(700f, 40f));
+            resultText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            resultText.verticalOverflow = VerticalWrapMode.Overflow;
+            resultText.transform.SetAsLastSibling();
 
             // 输入回显：与输入框本身的渲染互相独立，用于证明键盘输入确实进入了 InputField。
             Text echoText = CreateText(canvasGo.transform, "EchoText", string.Empty, font, 18, TextAnchor.MiddleLeft);

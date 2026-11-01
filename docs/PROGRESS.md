@@ -425,3 +425,49 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 涉及文件：Assets/Scripts/LocalPriorityRules.cs、AI_LOG.md、docs/PROGRESS.md。
 - **当前结论：词表修正 PASS / 规则测试 18/18 PASS（真实执行）/ 编译 PASS / 打包 PASS（APK 产出）/ Play·真机 UNVERIFIED。**
 - 下一步：commit（收窄"急" + Bonus 2 运行时 APK 打包）→ 用户安装 Builds/bonus2-runtime.apk 按验收清单人工验证。
+
+## [27] 2026-11-01 [FIX-1] 修复「提交结果提示不可见」与「标记颜色黑」：分支 A 命中修复 + 三项必做 + 编译 PASS + APK 产出（真机 UNVERIFIED）
+
+**目标**：修复提交提示不可见与标记颜色黑。铁律：先取证 → 按证据选分支 → 只改命中分支 → 自检上屏 → 打包一次。回滚点 = HEAD `5fbf2c65faf89e258075eff3fc93d27a8e8900bf`（开工时 status 空）。未执行 reset/amend/rebase/checkout/clean/restore。
+
+**阶段 0 取证（只读）**：resultText 为 legacy Text（SubmitUIBootstrap:109），Place(100,340,880,40) 中心锚点下 left=100−440=−340 越出屏幕左缘，MiddleLeft 文字从屏外起排 → 提示不可见；`renderer.material = markerMaterialInstance` 不存在（PlaneTapPlacer 只有 225 行 `renderer.sharedMaterial = markerMaterialInstance`，赋值对象即实例，渲染等价）；父链无任何 LayoutGroup/ContentSizeFitter；resultText 绑定非 null；color=白 alpha=1、GameObject active。
+
+**阶段 0.5 分支判定**：
+
+| 分支 | 判定 | 依据 |
+|---|---|---|
+| A 结果行越界 | **命中** | Place(100,340,880,40) → left=−340 < 0 |
+| B 屏内不可见 | 未命中 | alpha=1、active、Canvas 默认 Overlay |
+| C 字段 null | 未命中 | Bootstrap 绑定存在，SubmitPanel 字段存在 |
+| D 被 LayoutGroup 控制 | 未命中 | 父链 grep 0 匹配 |
+| E 缺 renderer.material 赋值 | 未命中 | 225 行 sharedMaterial 赋值已存在且等价 |
+
+**三处冲突与裁定（用户逐条裁定）**：
+1. 必做2 finally 直接 `interactable=true` 会摧毁飞行期防重锁 → 采纳方案甲：`dispatched` 标志，仅异常/未派发时 finally 恢复；派发成功不恢复，等 OnSubmitFinished。
+2. 分支A 原数值 `hintText+(0,−35)` 与 Bonus 2 建议行 (420,450) 重叠 → 裁定数值：`Place(resultText.rectTransform, (420,343), (700,40))`。
+3. S5Build 硬编码输出 mvp-ar.apk 与「禁止覆盖」冲突 → 裁定：构建后复制为 fix1-runtime.apk，如实声明 mvp-ar.apk 被覆盖（等价旧产物保留在 bonus2-runtime.apk）。
+   附加裁定：颜色诊断增加 Shader/实例 两行；echoText 若含「假坐标」则清空——实际 echoText 文本为动态「输入回显: […]」不含该词（「假坐标」仅存在于注释 16/89 行）→ **跳过清理**。
+
+**改动（4 个 Assets/Scripts .cs，一次一文件，改前完整读取）**：
+- **SubmitUIBootstrap.cs 106-113**：resultText 改 `Place((420,343),(700,40))` + horizontalOverflow=Wrap + verticalOverflow=Overflow + `resultText.transform.SetAsLastSibling()`（首编译 CS1061：SetAsLastSibling 是 Transform 方法非 Text 方法；按用户批准改正，仅此一行）。
+- **SubmitPanel.cs**：OnClickSubmit（167-231）包 try/catch/finally + `dispatched`（218 派发后置位；220-224 catch `SetResult("异常: "+ex.GetType().Name+" "+ex.Message)` 且 dispatched=false；225-230 finally `if(!dispatched) interactable=true`）；OnSubmitFinished（233-269）包 try/catch/finally（catch 同格式；265-267 finally `interactable=true`，原首行恢复移入 finally）；SetResult（271-279）追加双通道 `ARDebugHud.LastResult = message`。无空 catch。
+- **PlaneTapPlacer.cs**：诊断字段 41-46（DiagMaterial/DiagColor/DiagRender/DiagShader/DiagInstance/DiagFallback）；RefreshMarkerStyle（108-114）末尾追加 ApplyAntiBlackFallback + RefreshDiagnostics；ApplyAntiBlackFallback（117-163）：实例丢失→`new Material(renderer.sharedMaterial)` 重建并 `renderer.material=` 赋回（注明「材质: NULL→已重建」）、非 resolved 且颜色最大通道<0.05→medium 黄（注明「颜色回退:黄」）、非 resolved 强制 _Mode=0/Src=1/Dst=0/ZW=1/Q=2000/关 _ALPHABLEND_ON、resolved 完全豁免；RefreshDiagnostics（166-191）只读刷新五行诊断；创建块 314 行赋值后再刷一次；拦截 c 下限 274 行 `height−200`→`height−350`（面板扩到 15 行同步扩拦截区）。**未改 .mat 资产，未改共享材质本身**。
+- **ARDebugHud.cs**：静态字段 `LastResult`（19）；`resultRectLine`（22）+ 启动 1 秒协程 ResultRectCheck（35、40-64：GetWorldCorners 四角换算屏幕矩形，Overlay 画布世界坐标=屏幕像素，判定 L≥0∧R≤屏宽∧T≤屏高∧B≥0）；Box 高度 190→330（155 行，原有 8 行位置格式不变）；追加行 164-179：「最近结果:」(174)、「结果行」(194)、材质(214)、颜色(234)、渲染(254)、Shader(274)、实例(294)、兜底(314)；placer 为 null 时 214 行显示「标记诊断: 无 PlaneTapPlacer」。
+
+**编译与静态回归**：
+
+| 验证 | 原始输出 | 结论 |
+|---|---|---|
+| 首编译（Logs/fix1-import.log） | `error CS1061` ×3（同一行三程序集重复）：SubmitUIBootstrap.cs(113,24) 'Text' does not contain 'SetAsLastSibling' → 按纪律停止贴原文，用户批准单行修复 | FAIL（已定位修复） |
+| 重编译（fix1-import2.log 新名） | errorCS=0；`312: CompileScripts: 3101.612ms`；Batchmode quit successfully=1 | PASS |
+| S2 diff 范围（台账写入前采集） | diff --name-only = 仅 ARDebugHud.cs / PlaneTapPlacer.cs / SubmitPanel.cs / SubmitUIBootstrap.cs（4 文件，均在 Assets/Scripts）；无 .mat/.shader/.unity/ProjectSettings/后端/前端变更；diff --check 空 | PASS |
+
+**打包**：`BUILD_RESULT=Succeeded size=353054985 errors=0`（Logs/fix1-build.log，构建日志 errorCS=0）；APK `Builds/mvp-ar.apk` 18,485,858 字节（19:54，**被本次构建覆盖**，等价旧产物保留在 bonus2-runtime.apk）→ 复制 `Builds/fix1-runtime.apk` 同 18,485,858 字节（19:56）；bonus1-runtime.apk（18,478,786）与 bonus2-runtime.apk（18,470,462）未动 → PASS。
+
+**结果行矩形数值**：设计值（Place(420,343,700,40) 推算）x∈[70,770]、y∈[323,363] → 在 1280×720 设计坐标内；**真机实测（结果行: L/R/T/B/屏W/屏H/判定）UNVERIFIED**（本轮未运行 Play/装机）。
+**诊断各行实测值**（材质/颜色/渲染/Shader/实例/兜底）：UNVERIFIED（未运行）。
+**真机验收**：提交提示可见性、标记颜色、异常防护行为均 UNVERIFIED（agent 不代填结论）。
+
+- 涉及文件：Assets/Scripts/SubmitUIBootstrap.cs、SubmitPanel.cs、PlaneTapPlacer.cs、ARDebugHud.cs、AI_LOG.md、docs/PROGRESS.md（台账追加）。
+- **当前结论：取证/分支判定 PASS（A 命中）/ 编译 PASS / S2 范围 PASS / 打包 PASS；Play·真机 UNVERIFIED。**
+- 下一步：用户安装 Builds/fix1-runtime.apk 人工验收（提交提示可见、结果行自检行、颜色诊断行、黑标是否复现）。

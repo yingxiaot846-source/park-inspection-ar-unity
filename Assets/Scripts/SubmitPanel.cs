@@ -172,69 +172,99 @@ namespace MvpArSubmitter
                 return;
             }
 
-            var placer = PlaneTapPlacer.Instance;
-            if (placer == null || !placer.HasMarker)
+            // FIX-1 必做2：异常防护。dispatched 标记请求是否已成功派发——
+            // 派发成功时本帧不恢复 interactable（等 OnSubmitFinished 回调恢复），
+            // 仅异常/未派发时在 finally 恢复，兼顾按钮不永久失效与飞行期防重锁。
+            bool dispatched = false;
+            try
             {
-                SetResult("请先点击地面放置标记");
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(titleInput.text))
-            {
-                SetResult("标题不能为空");
-                return;
-            }
-
-            if (priorityIndex < 0 || priorityIndex >= PriorityValues.Length)
-            {
-                SetResult("优先级无效");
-                return;
-            }
-
-            Vector3 markerPos = placer.MarkerPosition;
-            CreateIssueRequest request = new CreateIssueRequest
-            {
-                title = titleInput.text.Trim(),
-                description = descInput.text,
-                priority = PriorityValues[priorityIndex],
-                position = new Vector3Payload
+                var placer = PlaneTapPlacer.Instance;
+                if (placer == null || !placer.HasMarker)
                 {
-                    x = Round3(markerPos.x),
-                    y = Round3(markerPos.y),
-                    z = Round3(markerPos.z),
-                },
-            };
+                    SetResult("请先点击地面放置标记");
+                    return;
+                }
 
-            submitButton.interactable = false;
-            SetResult("提交中…");
-            lastSubmittedPos = markerPos;
-            IssueApi.Submit(this, request, OnSubmitFinished);
+                if (string.IsNullOrWhiteSpace(titleInput.text))
+                {
+                    SetResult("标题不能为空");
+                    return;
+                }
+
+                if (priorityIndex < 0 || priorityIndex >= PriorityValues.Length)
+                {
+                    SetResult("优先级无效");
+                    return;
+                }
+
+                Vector3 markerPos = placer.MarkerPosition;
+                CreateIssueRequest request = new CreateIssueRequest
+                {
+                    title = titleInput.text.Trim(),
+                    description = descInput.text,
+                    priority = PriorityValues[priorityIndex],
+                    position = new Vector3Payload
+                    {
+                        x = Round3(markerPos.x),
+                        y = Round3(markerPos.y),
+                        z = Round3(markerPos.z),
+                    },
+                };
+
+                submitButton.interactable = false;
+                SetResult("提交中…");
+                lastSubmittedPos = markerPos;
+                IssueApi.Submit(this, request, OnSubmitFinished);
+                dispatched = true; // 必须在派发调用之后设置
+            }
+            catch (System.Exception ex)
+            {
+                SetResult("异常: " + ex.GetType().Name + " " + ex.Message);
+                dispatched = false; // 派发失败按未派发处理
+            }
+            finally
+            {
+                if (!dispatched)
+                {
+                    submitButton.interactable = true;
+                }
+            }
         }
 
         private void OnSubmitFinished(SubmitResult result)
         {
-            submitButton.interactable = true;
-            if (result.success)
+            try
             {
-                SetResult("提交成功 @ (" + Round3(lastSubmittedPos.x) + ", " +
-                          Round3(lastSubmittedPos.y) + ", " + Round3(lastSubmittedPos.z) + ")");
-                titleInput.text = string.Empty;
-                descInput.text = string.Empty;
-                Debug.Log("[SubmitPanel] 提交成功 id=" + result.issue.id +
-                          " createdAt=" + result.issue.createdAt +
-                          " position=(" + Round3(lastSubmittedPos.x) + ", " +
-                          Round3(lastSubmittedPos.y) + ", " + Round3(lastSubmittedPos.z) + ")");
-                // 加分项 1：提交成功才按后端返回的 priority/status 刷新标记颜色；失败不动标记。
-                var placerForStyle = PlaneTapPlacer.Instance;
-                if (placerForStyle != null)
+                if (result.success)
                 {
-                    placerForStyle.ApplyIssueStyle(result.issue.priority, result.issue.status);
+                    SetResult("提交成功 @ (" + Round3(lastSubmittedPos.x) + ", " +
+                              Round3(lastSubmittedPos.y) + ", " + Round3(lastSubmittedPos.z) + ")");
+                    titleInput.text = string.Empty;
+                    descInput.text = string.Empty;
+                    Debug.Log("[SubmitPanel] 提交成功 id=" + result.issue.id +
+                              " createdAt=" + result.issue.createdAt +
+                              " position=(" + Round3(lastSubmittedPos.x) + ", " +
+                              Round3(lastSubmittedPos.y) + ", " + Round3(lastSubmittedPos.z) + ")");
+                    // 加分项 1：提交成功才按后端返回的 priority/status 刷新标记颜色；失败不动标记。
+                    var placerForStyle = PlaneTapPlacer.Instance;
+                    if (placerForStyle != null)
+                    {
+                        placerForStyle.ApplyIssueStyle(result.issue.priority, result.issue.status);
+                    }
+                }
+                else
+                {
+                    // 失败：显示后端 error.message 原文；连接失败为统一文案。保留用户输入。
+                    SetResult(result.errorMessage);
                 }
             }
-            else
+            catch (System.Exception ex)
             {
-                // 失败：显示后端 error.message 原文；连接失败为统一文案。保留用户输入。
-                SetResult(result.errorMessage);
+                SetResult("异常: " + ex.GetType().Name + " " + ex.Message);
+            }
+            finally
+            {
+                submitButton.interactable = true;
             }
         }
 
@@ -244,6 +274,8 @@ namespace MvpArSubmitter
             {
                 resultText.text = message;
             }
+            // FIX-1 必做1 双通道：同一份文本同步进诊断面板「最近结果:」行。
+            ARDebugHud.LastResult = message;
         }
     }
 }

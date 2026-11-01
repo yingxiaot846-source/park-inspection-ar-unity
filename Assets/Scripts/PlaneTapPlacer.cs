@@ -37,6 +37,14 @@ namespace MvpArSubmitter
         // 标记专属材质实例：绝不改 Resources/Marker.mat 共享资产。
         private Material markerMaterialInstance;
 
+        // —— FIX-1：诊断上屏数据（每次 RefreshMarkerStyle 之后刷新，ARDebugHud 每帧读取，只读不回写）。
+        public string DiagMaterial = "材质: 未初始化";
+        public string DiagColor = "颜色: -";
+        public string DiagRender = "渲染: -";
+        public string DiagShader = "Shader: -";
+        public string DiagInstance = "实例: -";
+        public string DiagFallback = "兜底: 无";
+
         /// <summary>优先级 → 颜色（high红/medium黄/low绿/未知黄）。</summary>
         public static Color ColorForPriority(string priority)
         {
@@ -100,6 +108,85 @@ namespace MvpArSubmitter
         private void RefreshMarkerStyle()
         {
             ApplyMarkerVisualStyle(ColorForState(currentPriority, currentStatus), currentStatus == "resolved");
+            DiagFallback = "兜底: 无";
+            ApplyAntiBlackFallback();
+            RefreshDiagnostics();
+        }
+
+        // FIX-1 防黑兜底：只操作运行时材质实例，绝不修改 Resources/Marker.mat 资产，绝不改共享材质本身。
+        private void ApplyAntiBlackFallback()
+        {
+            if (marker == null)
+            {
+                return;
+            }
+            Renderer renderer = marker.GetComponent<Renderer>();
+            if (renderer == null)
+            {
+                return;
+            }
+            // 兜底 1：已放置标记但实例丢失 → 从 renderer.sharedMaterial 克隆重建并挂回渲染器。
+            if (markerMaterialInstance == null)
+            {
+                Material baseMat = renderer.sharedMaterial;
+                if (baseMat == null)
+                {
+                    DiagFallback = "材质: NULL→无法重建";
+                    return;
+                }
+                markerMaterialInstance = new Material(baseMat);
+                renderer.material = markerMaterialInstance;
+                ApplyMarkerVisualStyle(ColorForState(currentPriority, currentStatus), currentStatus == "resolved");
+                DiagFallback = "材质: NULL→已重建";
+                return;
+            }
+            // 非 resolved 才做颜色与渲染状态兜底；resolved 灰色半透明完全豁免。
+            if (currentStatus == "resolved")
+            {
+                return;
+            }
+            // 兜底 2：非 resolved 且颜色最大通道 < 0.05（近黑）→ 改用 medium 黄。
+            Color c = markerMaterialInstance.color;
+            float maxChannel = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+            if (maxChannel < 0.05f)
+            {
+                markerMaterialInstance.color = PriorityMediumColor;
+                DiagFallback = "颜色回退:黄";
+            }
+            // 兜底 3：非 resolved 强制不透明渲染状态（与 ApplyMarkerVisualStyle else 分支一致，防被外部覆盖）。
+            markerMaterialInstance.SetFloat("_Mode", 0f);
+            markerMaterialInstance.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+            markerMaterialInstance.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+            markerMaterialInstance.SetInt("_ZWrite", 1);
+            markerMaterialInstance.DisableKeyword("_ALPHABLEND_ON");
+            markerMaterialInstance.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
+        }
+
+        // FIX-1 颜色诊断：只读取渲染器当前共享材质（即实例），不修改任何材质。
+        private void RefreshDiagnostics()
+        {
+            Renderer renderer = marker != null ? marker.GetComponent<Renderer>() : null;
+            Material mat = renderer != null ? renderer.sharedMaterial : null;
+            if (mat == null)
+            {
+                DiagMaterial = "材质: NULL";
+                DiagColor = "颜色: -";
+                DiagRender = "渲染: -";
+                DiagShader = "Shader: -";
+                DiagInstance = "实例: -";
+                return;
+            }
+            DiagMaterial = "材质: OK";
+            Color c = mat.HasProperty("_Color") ? mat.GetColor("_Color") : Color.clear;
+            DiagColor = "颜色: #" + ColorUtility.ToHtmlStringRGB(c);
+            DiagRender = "渲染: Mode=" + (mat.HasProperty("_Mode") ? mat.GetFloat("_Mode").ToString() : "?") +
+                         " Src=" + (mat.HasProperty("_SrcBlend") ? mat.GetFloat("_SrcBlend").ToString() : "?") +
+                         " Dst=" + (mat.HasProperty("_DstBlend") ? mat.GetFloat("_DstBlend").ToString() : "?") +
+                         " ZW=" + (mat.HasProperty("_ZWrite") ? mat.GetFloat("_ZWrite").ToString() : "?") +
+                         " Q=" + mat.renderQueue;
+            DiagShader = "Shader: " + (mat.shader != null ? mat.shader.name : "null") +
+                         " supported=" + (mat.shader != null && mat.shader.isSupported);
+            DiagInstance = "实例: " + mat.name + " id=" + mat.GetInstanceID();
         }
 
         /// <summary>记录当前选择的优先级，供随后放置的标记上色（由 SubmitPanel.SetPriority 调用）。</summary>
@@ -183,7 +270,8 @@ namespace MvpArSubmitter
             }
 
             // 拦截 c：左上角诊断 HUD 区域（避免点 HUD 时误放标记）。
-            if (screenPos.x < 500f && screenPos.y > Screen.height - 200f)
+            // FIX-1：面板扩到 15 行（Box 330 高），拦截下限从 height-200 同步扩到 height-350。
+            if (screenPos.x < 500f && screenPos.y > Screen.height - 350f)
             {
                 LastTapInfo = "UI拦截";
                 Debug.Log("[Tap] 拦截:左上角诊断面板区域");
@@ -223,6 +311,7 @@ namespace MvpArSubmitter
                     markerMaterialInstance = new Material(markerMat);
                     RefreshMarkerStyle();
                     renderer.sharedMaterial = markerMaterialInstance;
+                    RefreshDiagnostics(); // FIX-1：赋值后再刷新一次诊断（否则读到的是赋值前的默认材质）
                     Debug.Log("[PlaneTapPlacer] 标记创建，样式 priority=" + currentPriority +
                               " status=" + currentStatus);
                 }

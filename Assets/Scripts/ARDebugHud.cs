@@ -15,6 +15,12 @@ namespace MvpArSubmitter
         // 后端连通状态：每 5 秒探测一次 /api/health。
         private string backendState = "探测#0";
 
+        // FIX-1 必做1：提交结果双通道——SubmitPanel.SetResult 同步写这里，面板新增「最近结果:」行显示。
+        public static string LastResult = "无";
+
+        // FIX-1 必做3：启动 1 秒后计算 resultText 屏幕矩形并上屏（初值：未计算）。
+        private string resultRectLine = "结果行: 未计算(启动1秒后)";
+
         private void Start()
         {
             session = Object.FindObjectOfType<ARSession>();
@@ -26,6 +32,35 @@ namespace MvpArSubmitter
                       " backend=" + backend);
             backendState = "探测已启动";
             StartCoroutine(CheckBackendLoop());
+            StartCoroutine(ResultRectCheck());
+        }
+
+        // FIX-1 必做3：启动 1 秒后读 resultText 四角，换算屏幕矩形并判定在屏内/越界。
+        // ScreenSpaceOverlay 画布的世界坐标即屏幕像素，GetWorldCorners 可直接当屏幕坐标用。
+        private IEnumerator ResultRectCheck()
+        {
+            yield return new WaitForSecondsRealtime(1f);
+            SubmitPanel panel = Object.FindObjectOfType<SubmitPanel>();
+            if (panel == null || panel.resultText == null)
+            {
+                resultRectLine = "结果行: resultText=null 判定=无法计算";
+                Debug.Log("[ARDebugHud] " + resultRectLine);
+                yield break;
+            }
+            RectTransform rt = panel.resultText.rectTransform;
+            Vector3[] corners = new Vector3[4];
+            rt.GetWorldCorners(corners);
+            // GetWorldCorners 顺序：0=左下 1=左上 2=右上 3=右下。
+            float left = corners[0].x;
+            float bottom = corners[0].y;
+            float top = corners[1].y;
+            float right = corners[2].x;
+            bool inScreen = left >= 0f && right <= Screen.width && top <= Screen.height && bottom >= 0f;
+            resultRectLine = "结果行: L=" + Mathf.RoundToInt(left) + " R=" + Mathf.RoundToInt(right) +
+                             " T=" + Mathf.RoundToInt(top) + " B=" + Mathf.RoundToInt(bottom) +
+                             " 屏W=" + Screen.width + " 屏H=" + Screen.height +
+                             " 判定=" + (inScreen ? "在屏内" : "越界");
+            Debug.Log("[ARDebugHud] " + resultRectLine);
         }
 
         private const float ProbeTimeout = 3f;
@@ -116,7 +151,8 @@ namespace MvpArSubmitter
                 lastTap = "最近一次点击: " + placer.LastTapInfo;
             }
 
-            GUI.Box(new Rect(10, 10, 480, 190), "");
+            // FIX-1：Box 高度 190→330（容纳追加行）；原有 8 行的位置与格式不变。
+            GUI.Box(new Rect(10, 10, 480, 330), "");
             GUI.Label(new Rect(20, 14, 460, 20), "S5.3 诊断面板");
             GUI.Label(new Rect(20, 34, 460, 20), "AR 会话: " + sessionState);
             GUI.Label(new Rect(20, 54, 460, 20), "相机组件: " + cameraState);
@@ -125,6 +161,22 @@ namespace MvpArSubmitter
             GUI.Label(new Rect(20, 114, 460, 20), "后端连通: " + backendState);
             GUI.Label(new Rect(20, 134, 460, 20), markerState);
             GUI.Label(new Rect(20, 154, 460, 20), lastTap);
+            // FIX-1 追加行（逐行追加，不改动上方原有各行）。
+            GUI.Label(new Rect(20, 174, 470, 20), "最近结果: " + LastResult);
+            GUI.Label(new Rect(20, 194, 470, 20), resultRectLine);
+            if (placer != null)
+            {
+                GUI.Label(new Rect(20, 214, 470, 20), placer.DiagMaterial);
+                GUI.Label(new Rect(20, 234, 470, 20), placer.DiagColor);
+                GUI.Label(new Rect(20, 254, 470, 20), placer.DiagRender);
+                GUI.Label(new Rect(20, 274, 470, 20), placer.DiagShader);
+                GUI.Label(new Rect(20, 294, 470, 20), placer.DiagInstance);
+                GUI.Label(new Rect(20, 314, 470, 20), placer.DiagFallback);
+            }
+            else
+            {
+                GUI.Label(new Rect(20, 214, 470, 20), "标记诊断: 无 PlaneTapPlacer");
+            }
         }
     }
 }
