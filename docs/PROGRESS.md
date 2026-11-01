@@ -376,3 +376,52 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 涉及文件：Assets/Scripts/LocalPriorityRules.cs、SubmitPanel.cs、AI_LOG.md、docs/PROGRESS.md（仅追加更正记录，历史未覆盖）。
 - **当前结论：规则测试 PASS / 编译 PASS / 静态不变式+Bonus 1 兼容性 PASS / Play·真机 UNVERIFIED；本轮未打 APK。**
 - 下一步：commit（fix(bonus2) 增量修正）→ 等用户指令（装机验证建议刷新/采用/手动覆盖，或继续调整）。
+
+## [26] 2026-11-01 Bonus 2 收尾与打包验收：收窄单字"急" + 18/18 规则测试 PASS + 编译 PASS + APK 产出（真机 UNVERIFIED）
+
+**目标**：修正单字"急"误判风险、补齐测试、编译打包 APK，交用户真机人工验收；不开始新功能、不改必做功能、不改 Bonus 1 实现。
+
+**基线保护**：开工读 5 文件（LocalPriorityRules/SubmitPanel/SubmitUIBootstrap/AI_LOG/PROGRESS）+ git 原始输出——`git status --short --untracked-files=all` 空；`git log -3 --oneline` = 4ad0a26 / e62b7ff / e12988e；`git diff --check` 空 EXIT=0。**本轮回滚点 = HEAD `4ad0a26`**。e12988e/e62b7ff/4ad0a26 均保留，未执行 reset/amend/rebase/checkout/clean/restore。
+
+**词表修正（仅改 LocalPriorityRules.cs 一处数组 + 注释；SubmitPanel/SubmitUIBootstrap 零改动）**：
+- 移除 high 中单字"急"（误命中"不着急/别急"等语境）；保留"紧急"；新增"急修""急停"；medium/low 词表零改动；联合判级逻辑与"（命中:xxx）"格式不变。
+- **high 词表最终内容**：`{ "漏电", "火灾", "燃气", "触电", "坍塌", "坠落", "人身", "危险", "紧急", "重大", "砸", "急修", "急停" }`（13 词）。
+
+**规则测试（真实执行：Unity 自带 Mono mcs 编译项目真实源文件 + 沙箱 harness mvp\ruletests\，不入库）**：mcs EXIT=0、mono RUN_EXIT=0，18 条逐项：
+
+| # | 输入（标题/描述） | 实际 priority | matched | reason（命中词） | 期望 | 结论 |
+|---|---|---|---|---|---|---|
+| T1 | 配电箱漏电 / 空 | high | True | 漏电 | high | PASS |
+| T2 | 空调异常噪音 / 空 | medium | True | 异常 | medium | PASS |
+| T3 | 墙面轻微划痕 / 空 | low | True | 划痕 | low | PASS |
+| T4 | 墙面划痕 / 发现配电箱漏电 | high | True | 漏电 | high | PASS |
+| T5 | 空调故障 / 建议优化外观 | medium | True | 故障 | medium | PASS |
+| T6 | 巡检记录 / 普通巡检记录 | "" | False | 未命中关键词 | matched=false | PASS |
+| T7 | "" / "" | "" | False | ""（不崩） | matched=false | PASS |
+| T8 | null / null | "" | False | ""（不崩） | matched=false | PASS |
+| T9 | 墙面轻微划痕 / 设备故障并有漏电危险 | high | True | 漏电 | high | PASS |
+| T10 | 照明设备异常 / 存在坠落危险 | high | True | 坠落 | high | PASS |
+| T11 | 指示牌被砸坏 / 空 | high | True | 砸 | high | PASS |
+| T12 | 火情紧急 / 空 | high | True | 紧急 | high | PASS |
+| T13 | 天花板漏水 / 空 | medium | True | 漏水 | medium | PASS |
+| T14 | 轻微划痕 / 地面漏水 | medium | True | 漏水 | 漏水不在 low | PASS |
+| T15 | 不着急处理，可下周一并安排 / 空 | ""（未命中关键词） | False | "" | 非 high | PASS |
+| T16 | 紧急处理配电柜冒烟 / 空 | high | True | 紧急 | high | PASS |
+| T17 | 急停按钮损坏 / 空 | high | True | 急停 | high | PASS |
+| T18 | 别急，慢慢来 / 空 | ""（未命中关键词） | False | "" | 非 high | PASS |
+
+→ **规则测试 PASS（18/18，真实执行）**。披露：harness 汇总行打印 "ALL PASS (14/14)" 为 harness 内旧硬编码文案未同步更新，逐条输出实为 18 行 PASS；harness 为沙箱文件非项目交付物。
+
+| 验证 | 原始输出 | 结论 |
+|---|---|---|
+| 编译 | Logs/bonus2c-import.log（新名）：errorCS=0；`304: CompileScripts: 10057.407ms`；quit=1 | PASS |
+| 打包首跑（全名参数失误） | `-executeMethod MvpArSubmitter.S5Build.Build` → 日志原文 `executeMethod class 'S5Build' could not be found.`（S5Build 在全局命名空间；调用参数失误非代码问题，重试 1 次） | FAIL（已定位） |
+| 打包重试（短名） | `BUILD_RESULT=Succeeded size=352842739 errors=0`（2850 行）；构建日志 errorCS=0；APK `Builds/mvp-ar.apk` 18,470,462 字节（15:04 新生成）→ 复制 `Builds/bonus2-runtime.apk` 同大小，原 mvp-ar.apk 保留 | PASS |
+| 静态回归 | LocalPriorityRules.cs 内 UnityWebRequest/HttpClient/http(s):// 0 匹配；PriorityValues 定义=1；防抖/Update 残留=0；git diff --name-only 仅 LocalPriorityRules.cs（PlaneTapPlacer/IssueApi/IssueModels/ApiConfig/SubmitUIBootstrap 全零改动）；Go/React/backend data 零改动 | PASS |
+| 真机/Play | 未执行（由用户人工验收，agent 不代填结果、不生成截图/日志路径） | UNVERIFIED |
+
+**证据顺序更正（追加条目，不覆盖历史）**：上一轮（第六轮）报告第 8 节的 git diff --stat / --name-only 是在修改台账文件之前采集的，仅覆盖 2 个源码文件，不能证明台账文件的改动范围；本轮起 diff 证据统一在所有文件（含台账）写完后、提交前采集并贴完整输出。
+
+- 涉及文件：Assets/Scripts/LocalPriorityRules.cs、AI_LOG.md、docs/PROGRESS.md。
+- **当前结论：词表修正 PASS / 规则测试 18/18 PASS（真实执行）/ 编译 PASS / 打包 PASS（APK 产出）/ Play·真机 UNVERIFIED。**
+- 下一步：commit（收窄"急" + Bonus 2 运行时 APK 打包）→ 用户安装 Builds/bonus2-runtime.apk 按验收清单人工验证。

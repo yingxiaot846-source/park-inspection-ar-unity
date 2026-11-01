@@ -21,8 +21,10 @@ namespace MvpArSubmitter
     public static class LocalPriorityRules
     {
         // 词表按园区巡检语境克制取词；增删关键词只改这几组数组即可。
+        // 收窄说明：单字"急"会误命中"不着急/别急"等否定或安抚语境，故移除；
+        // 保留"紧急"，并以"急修/急停"覆盖维修语境的真正紧急表述。
         private static readonly string[] HighKeywords =
-            { "漏电", "火灾", "燃气", "触电", "坍塌", "坠落", "人身", "危险", "紧急", "重大", "砸", "急" };
+            { "漏电", "火灾", "燃气", "触电", "坍塌", "坠落", "人身", "危险", "紧急", "重大", "砸", "急修", "急停" };
 
         private static readonly string[] MediumKeywords =
             { "故障", "异常", "损坏", "渗水", "漏水", "噪音", "失灵", "停用", "卡住", "影响使用", "无法" };

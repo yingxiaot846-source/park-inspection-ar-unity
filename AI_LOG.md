@@ -134,3 +134,30 @@ git：`git diff --check` 空 EXIT=0；`git status` 仅 ` M LocalPriorityRules.cs
 - 涉及文件：Assets/Scripts/LocalPriorityRules.cs、SubmitPanel.cs、AI_LOG.md、docs/PROGRESS.md（台账追加）。
 - Bonus 2 剩余 UNVERIFIED：建议实时刷新、采用生效、手动覆盖的 Play/真机行为（需装机，本轮禁打 APK）。
 
+### Bonus 2 收尾与打包验收（第七轮）
+
+- 状态：[LIVE]
+- 阶段：Bonus 2 收尾——收窄单字"急"误判风险 + 补测 + 编译 + 打包 APK（不开始新功能、不改 Bonus 1、不改 SubmitPanel/SubmitUIBootstrap 行为逻辑）
+- 基线保护：开工读 5 文件 + git 原始输出——`git status --short --untracked-files=all` 空；`git log -3 --oneline` = 4ad0a26 / e62b7ff / e12988e；`git diff --check` 空（EXIT=0）。**本轮回滚点 = HEAD `4ad0a26`**。未执行 reset/amend/rebase/checkout/clean/restore，e12988e/e62b7ff/4ad0a26 均保留。
+
+词表修正（只改 Assets/Scripts/LocalPriorityRules.cs 一处数组 + 注释）：
+- high 移除单字"急"（会误命中"不着急/别急"等否定或安抚语境）；保留"紧急"；新增"急修""急停"覆盖维修语境；medium/low 词表零改动；联合判级逻辑与"（命中:xxx）"可解释格式不变。
+- **high 词表最终内容**：`{ "漏电", "火灾", "燃气", "触电", "坍塌", "坠落", "人身", "危险", "紧急", "重大", "砸", "急修", "急停" }`（13 词）。
+
+规则测试（真实执行：Unity 自带 Mono mcs 编译项目真实 LocalPriorityRules.cs + 沙箱 harness，harness 在项目外 mvp\ruletests\ 不入库）：mcs EXIT=0、mono RUN_EXIT=0。T1-T14 全部重跑 PASS + 新增 T15-T18：
+- T15 不着急处理，可下周一并安排/空 → matched=False priority=''（未命中关键词）→ **非 high** PASS；
+- T16 紧急处理配电柜冒烟/空 → high（命中:紧急）PASS；
+- T17 急停按钮损坏/空 → high（命中:急停）PASS；
+- T18 别急，慢慢来/空 → matched=False priority=''（未命中关键词）→ **非 high** PASS。
+- **18/18 PASS**（注：harness 汇总行文案仍写 "ALL PASS (14/14)"，为 harness 内旧的硬编码字符串未同步更新，逐条输出实际为 18 行 PASS，此处如实披露；harness 非项目交付物不入库）。
+
+编译：`Logs/bonus2c-import.log`（新名）→ errorCS=0、`304: CompileScripts: 10057.407ms`、Batchmode quit successfully=1 → **PASS**。
+打包：首次用全名 `-executeMethod MvpArSubmitter.S5Build.Build` 失败（日志原文 `executeMethod class 'S5Build' could not be found`，S5Build 在全局命名空间，属调用参数失误非代码问题）；按历史惯例改短名 `S5Build.Build` 重试 1 次成功：`BUILD_RESULT=Succeeded size=352842739 errors=0`（2850 行）、构建日志 errorCS=0；APK = `Builds/mvp-ar.apk` 18,470,462 字节（15:04 新生成），复制为 `Builds/bonus2-runtime.apk` 同大小，原 mvp-ar.apk 保留未覆盖。
+
+静态回归：UnityWebRequest/HttpClient/http(s):// 在 LocalPriorityRules.cs 0 匹配；PriorityValues 定义 1 处；防抖/Update 残留 0；构建后 git status 仅 ` M Assets/Scripts/LocalPriorityRules.cs` → 禁改文件全部零改动；Go/React/backend data 零改动。
+
+证据顺序更正（第八节要求）：**上一轮（第六轮）报告第 8 节的 git diff --stat / --name-only 是在修改台账文件之前采集的，仅覆盖 2 个源码文件，不能证明台账文件的改动范围**；本轮起改为在所有文件（含台账）写完后、提交前采集 diff 证据并贴完整输出（见本轮报告第 8 节）。
+
+- **本轮结论：词表修正 PASS；规则测试 18/18 PASS（真实执行）；编译 PASS；打包 PASS（APK 产出）；Play/真机 UNVERIFIED（由用户人工验收，agent 不代填结果）。**
+- 涉及文件：Assets/Scripts/LocalPriorityRules.cs、AI_LOG.md、docs/PROGRESS.md（台账追加）。
+
