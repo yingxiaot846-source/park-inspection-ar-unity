@@ -471,3 +471,17 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 涉及文件：Assets/Scripts/SubmitUIBootstrap.cs、SubmitPanel.cs、PlaneTapPlacer.cs、ARDebugHud.cs、AI_LOG.md、docs/PROGRESS.md（台账追加）。
 - **当前结论：取证/分支判定 PASS（A 命中）/ 编译 PASS / S2 范围 PASS / 打包 PASS；Play·真机 UNVERIFIED。**
 - 下一步：用户安装 Builds/fix1-runtime.apk 人工验收（提交提示可见、结果行自检行、颜色诊断行、黑标是否复现）。
+
+## [28] 2026-11-02 补录 2026-11-01 真机验收记录（AI_LOG 第九轮）+ 用例数核对
+
+**目标**：把用户 2026-11-01 真机/浏览器逐字观测补录进 AI_LOG（新编号按现有序列顺延），并核对 ruletests 用例数；零 Unity 代码改动。
+
+| 检查项 | 命令/动作 | 原始输出 | 结论 |
+|---|---|---|---|
+| 用例数核对 | `grep -c "Case(" mvp/ruletests/RuleTests.cs` | `19`（含 1 行方法定义 `private static void Case(`）；用例调用 `grep -c 'Case("'` = `18` → 实际用例 **18** | PASS（与 README §9「18/18」一致，数字无需修改；N=18 分支） |
+| AI_LOG 追加 | Edit AI_LOG.md：新增「### 真机验收记录 2026-11-01（第九轮）」，13 条观测按轮内 1-13 编号逐字照抄（原文条目 12-24 顺延），并只追加两条更正说明（用例数核对、段号描述「T1-T14」错误） | 编辑成功；历史条目零改写 | PASS |
+| 改动范围 | `git status --porcelain`（提交前采集） | 仅 `M AI_LOG.md`、`M docs/PROGRESS.md`（本文件）；Assets/**、.unity、.mat、ProjectSettings、Packages 零改动 | PASS |
+
+- 涉及文件：AI_LOG.md（第九轮追加）、docs/PROGRESS.md（本条追加）。
+- **当前结论：用例数核对 PASS（N=18）/ 真机验收记录补录 PASS / 改动范围 PASS。**
+- 下一步：本仓 commit `docs: 补录 2026-11-01 真机验收证据` → mvp 仓 README §7 三条引用改编号 + PROGRESS [18] → 两仓各自提交、状态清空后报告，等用户确认再开始阶段 A。
