@@ -485,3 +485,22 @@ S5.5 四处改动：ProjectSettings.asset `insecureHttpOption: 0`→`2`；S5Setu
 - 涉及文件：AI_LOG.md（第九轮追加）、docs/PROGRESS.md（本条追加）。
 - **当前结论：用例数核对 PASS（N=18）/ 真机验收记录补录 PASS / 改动范围 PASS。**
 - 下一步：本仓 commit `docs: 补录 2026-11-01 真机验收证据` → mvp 仓 README §7 三条引用改编号 + PROGRESS [18] → 两仓各自提交、状态清空后报告，等用户确认再开始阶段 A。
+
+## [29] 2026-11-02 按钮按压缩放动效 + 深底浅字蓝白配色（E1–E12 + 3 新组件，编译 PASS + APK 产出）
+
+**目标**：SubmitUIBootstrap 配色改造（深底浅字蓝白）+ 5 按钮按压缩放动效；新增 UIButtonPressAnimator / PriorityButtonColorSync / ResultTextColorizer 三组件（用户裁决）。白名单：SubmitUIBootstrap.cs + 3 新 .cs（+.meta）+ AI_LOG + 本文件；禁改 PlaneTapPlacer/IssueApi/IssueModels/ApiConfig/ARDebugHud/SubmitPanel、任何 .unity/.mat/.shader/ProjectSettings/Packages。
+
+| 检查项 | 命令/动作 | 原始输出 | 结论 |
+|---|---|---|---|
+| E1–E12 落盘 | 逐条 `grep -n`（行号+原文） | E1 常量@16/19/22/25/28/31；E2@82 E3@89 E4@96；E5@101/102/107/108/109；E6@119 E7@124；E8@128–136；E9@143–151；E10@183–196；E11@245/266；E12@282–289 | 全部落盘 |
+| 静态不变式 | `git diff -U0 -- Assets/Scripts/ \| grep -E "anchoredPosition\|sizeDelta\|anchorMin\|anchorMax\|pivot\|offsetMin\|offsetMax"` | 无输出（grep exit=1） | PASS |
+| 禁改文件 | `git diff -- Assets/Scripts/PlaneTapPlacer.cs` | 空 | PASS |
+| 无第三方 tween | `grep -rn "DOTween" Assets` | 无匹配（exit=1） | PASS |
+| insecureHttpOption | `grep -n "insecureHttpOption" ProjectSettings/ProjectSettings.asset` | `773:  insecureHttpOption: 2` | PASS |
+| 编译+打包 | `D:/Unity job/2022.3.62f3c1/Editor/Unity.exe -batchmode -quit -executeMethod S5Build.Build`（用户给的 `C:\Program Files\Unity\Hub\...` 路径不存在，用实际 D 盘路径） | 首跑 `error CS1061 ×6`（`Button.AddComponent` 不存在）→ 修复为 `.gameObject.AddComponent`@186/194 重跑：`error CS` 计数 **0**、`CompileScripts: 2770.331ms`、`BUILD_RESULT=Succeeded size=353180604 errors=0`、exit=0 | PASS |
+| APK | `cp Builds/mvp-ar.apk Builds/ui-runtime.apk` → 四 APK 字节 | fix1 **18,485,858** ✓ / bonus1 18,478,786 / bonus2 18,470,462 / ui-runtime 18,490,870 | PASS |
+| E12 风险处理 | 按钮创建 vs 覆盖语句行号 | 低/中/高 创建@106 → 覆盖@107–109（同轮次内更晚）；采用 创建@126 → E8@128–136；提交 创建@141 → E9@143–151；`colorSync.Bind`@188 全部创建之后。5 按钮全部有归属，无未覆盖按钮（③ 停止条件不触发） | PASS |
+
+- 涉及文件：SubmitUIBootstrap.cs、UIButtonPressAnimator.cs(.meta)、PriorityButtonColorSync.cs(.meta)、ResultTextColorizer.cs(.meta)、AI_LOG.md（第十轮）、docs/PROGRESS.md（本条）。
+- **当前结论：E1–E12 全落盘 PASS / 静态不变式 PASS / 编译打包 PASS / APK 产出 PASS。**
+- 下一步：点名 add 上述 9 项 → commit `style(android): 按钮按压缩放动效 + 深底浅字蓝白配色` → 报告 hash/show/status，真机验收 9/10/11 待用户执行（只列不代填）。

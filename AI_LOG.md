@@ -209,3 +209,22 @@ git：`git diff --check` 空 EXIT=0；`git status` 仅 ` M LocalPriorityRules.cs
 - **用例数核对（只追加、不改写历史条目）**：`grep -c "Case(" ruletests/RuleTests.cs` = **19**（其中 1 行为方法定义 `private static void Case(`），用例调用 `grep -c 'Case("'` = **18** → 实际用例 **18**，与 README §9「18/18」一致，数字无需修改。
 - **段号描述更正（只追加、不改写历史条目）**：历史条目「T1-T14 全部重跑 PASS」（第七轮）与 harness 文件头「跑 10 个指定场景」为段号/描述错误——实际用例构成为 **T1-T10（10 条）+ KA_ZA / KA_JI / KA_LOUSHUI / KA_LOUSHUI_LOW（4 条）+ T15-T18（4 条）= 18 条，不存在 T11-T14 用例**；第六轮「14/14」是当时 14 条用例的真实执行结果（当时成立），第七轮「18/18」为补测后的真实结果；harness 内「ALL PASS (14/14)」为旧硬编码字符串（第七轮已披露），本轮未改 harness 文件。
 
+### 按钮按压缩放动效 + 深底浅字蓝白配色（第十轮）2026-11-02
+
+- **改动范围**（白名单 + 用户裁决追加）：仅 `Assets/Scripts/SubmitUIBootstrap.cs`（M）+ 新增 `UIButtonPressAnimator.cs`、`PriorityButtonColorSync.cs`、`ResultTextColorizer.cs`（各 + .meta）；PlaneTapPlacer.cs / IssueApi.cs / IssueModels.cs / ApiConfig.cs / ARDebugHud.cs / SubmitPanel.cs、任何 .unity/.mat/.shader/ProjectSettings/Packages 零改动。
+- **E1–E12 落盘（行号为最终磁盘行号，逐条 grep 复验）**：
+  1. E1 配色常量：`LabelColor`@16、`HintTextColor`@19、`InputBackgroundColor`@22、`InputPlaceholderColor`@25、`AdoptBackgroundColor`@28、`AdoptDisabledColor`@31
+  2. E2 `titleLabel.color = LabelColor`@82；E3 `descLabel.color`@89；E4 `priorityLabel.color`@96（仅加颜色语句，Place 参数未动）
+  3. E5 循环外声明 `priorityImages`@101 / `priorityButtonTexts`@102，循环内 `transition = Selectable.Transition.None`@107 + `GetComponent<Image>`@108 + `GetComponentInChildren<Text>(true)`@109（一次缓存）
+  4. E6 `hintText.color = HintTextColor`@119；E7 `suggestionText.color = HintTextColor`@124
+  5. E8 采用按钮：`adoptImage.color = AdoptBackgroundColor`@128 + ColorBlock 五态@130–135（四态=AdoptBackgroundColor，disabled=AdoptDisabledColor）+ `targetGraphic = adoptImage`@136
+  6. E9 提交按钮：`submitImage.color = Color.white`@143 先设纯白 + ColorBlock 五态@145–149（#0071E3/#0077ED/#0068D0/#0071E3/#B0B0B5）+ `targetGraphic = submitImage`@151
+  7. E10 绑定段末挂 `PriorityButtonColorSync`@183–188（`Bind(panel, priorityImages, priorityButtonTexts)`）与 `ResultTextColorizer`@191–196（`Bind(resultText)`），全部直接传引用，零 Find / FindObjectOfType
+  8. E11 输入框 `background.color = InputBackgroundColor`@245、`placeholderText.color = InputPlaceholderColor`@266（斜体/字号未动）
+  9. E12 `CreateButton` 默认底 `AdoptBackgroundColor`@282、`targetGraphic = background`@284、`GetComponent<UIButtonPressAnimator>()` 判空后 `AddComponent`@287–289
+- **新增组件**：`UIButtonPressAnimator`（按下 0.97/90ms、松开与移出 1.0/140ms，Update `Time.unscaledDeltaTime` 线性逼近，OnDisable/OnDestroy 复位 localScale=Vector3.one，只操作 localScale）；`PriorityButtonColorSync`（只读 `panel.priorityIndex`，LateUpdate 逐分量差值 >0.004 才写 Image.color/Text.color，transition=None 配合）；`ResultTextColorizer`（文案前缀映射 4 色，缓存上次文案仅变化时判定，只写 Text.color）。三 GUID 无冲突。
+- **编译修复**：首次 batchmode 报 `error CS1061 ×6`——`Button.AddComponent` 不存在（AddComponent 属 GameObject）→ 改 `priorityButtons[0].gameObject.AddComponent<...>`@186、`submitButton.gameObject.AddComponent<...>`@194，复验后重跑。
+- **构建取证**：`error CS` 计数 **0**；`CompileScripts: 2770.331ms`；`BUILD_RESULT=Succeeded size=353180604 errors=0`；Unity exit=0。
+- **APK**：`cp Builds/mvp-ar.apk Builds/ui-runtime.apk` → fix1-runtime.apk **18,485,858**（精确匹配）/ bonus1-runtime.apk 18,478,786 / bonus2-runtime.apk 18,470,462 / ui-runtime.apk 18,490,870。
+- **真机验收 9/10/11 只列不代填**：9) 点「高」等 2 秒仍是蓝底白字；10) 连点低中高颜色跟随无残留；11) 提交成功变绿、空标题变红、「请先点击地面放置标记」橙色。
+
